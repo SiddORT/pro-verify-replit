@@ -1,0 +1,178 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../api";
+import Topbar from "../components/Topbar";
+
+function slugify(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brand";
+}
+
+function fileToDataUrl(f: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  });
+}
+
+export default function Brands() {
+  const [brands, setBrands] = useState<any[]>([]);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("#1b5e20");
+  const [desktop, setDesktop] = useState<string | null>(null);
+  const [mobile, setMobile] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [q, setQ] = useState("");
+  const [saving, setSaving] = useState(false);
+  const dRef = useRef<HTMLInputElement>(null);
+  const mRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    const r = await api.get("/api/brands");
+    setBrands(r.data);
+  }
+  useEffect(() => { load(); }, []);
+
+  function reset() {
+    setName(""); setColor("#1b5e20"); setDesktop(null); setMobile(null); setEditingId(null);
+    if (dRef.current) dRef.current.value = "";
+    if (mRef.current) mRef.current.value = "";
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const body = { name, primary_color: color, desktop_image: desktop, mobile_image: mobile, is_active: true };
+      if (editingId) await api.put(`/api/brands/${editingId}`, body);
+      else await api.post("/api/brands", body);
+      reset();
+      load();
+    } finally { setSaving(false); }
+  }
+
+  async function edit(b: any) {
+    setEditingId(b.id);
+    setName(b.name); setColor(b.primary_color || "#1b5e20");
+    setDesktop(b.desktop_image || null); setMobile(b.mobile_image || null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function toggle(id: number) { await api.patch(`/api/brands/${id}/toggle`); load(); }
+  async function del(id: number) {
+    if (!confirm("Delete this brand and all its codes?")) return;
+    await api.delete(`/api/brands/${id}`); load();
+  }
+
+  const filtered = brands.filter((b) => !q || b.name.toLowerCase().includes(q.toLowerCase()));
+
+  return (
+    <>
+      <Topbar />
+      <div className="page">
+        <Link to="/" className="back-link">← Back to Dashboard</Link>
+        <h1 className="page-title">Brand Master</h1>
+        <p className="page-sub">Add and manage brands for product code mapping</p>
+
+        <form onSubmit={save} className="card" style={{ marginBottom: 24 }}>
+          <h3 style={{ margin: "0 0 18px", fontSize: 16 }}>{editingId ? "Edit Brand" : "Add New Brand"}</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <label className="label">Brand Name</label>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter brand name" required />
+            </div>
+            <div>
+              <label className="label">Slug (auto-generated)</label>
+              <input className="input" value={slugify(name)} readOnly style={{ background: "#f9fafb" }} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label className="label">Primary Color</label>
+            <div className="row">
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
+                     style={{ width: 50, height: 40, border: "1px solid #e5e7eb", borderRadius: 6, padding: 2 }} />
+              <input className="input" value={color} onChange={(e) => setColor(e.target.value)} style={{ maxWidth: 200 }} />
+            </div>
+          </div>
+          <label className="label">Background Images</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <ImagePicker title="Desktop / Web" sub="Recommended: 1920 x 1080px (16:9)"
+              value={desktop} onChange={setDesktop} inputRef={dRef} />
+            <ImagePicker title="Mobile" sub="Recommended: 750 x 1334px (9:16)"
+              value={mobile} onChange={setMobile} inputRef={mRef} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            {editingId && <button type="button" className="btn-outline" onClick={reset}>Cancel</button>}
+            <button className="btn" type="submit" disabled={saving}>{saving ? "Saving..." : (editingId ? "Update Brand" : "Add Brand")}</button>
+          </div>
+        </form>
+
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ margin: 0, fontSize: 16 }}>All Brands</h3>
+            <div className="search" style={{ maxWidth: 260 }}>
+              <span>🔍</span>
+              <input placeholder="Search brands..." value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th><th>IMAGE</th><th>BRAND NAME</th><th>STATUS</th>
+                <th>CREATED AT</th><th>UPDATED AT</th><th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((b, i) => (
+                <tr key={b.id}>
+                  <td>{i + 1}</td>
+                  <td>
+                    {b.desktop_image
+                      ? <img src={b.desktop_image} className="brand-thumb" alt="" />
+                      : <div className="brand-thumb" style={{ background: b.primary_color }} />}
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{b.name}</td>
+                  <td>{b.is_active ? <span className="badge-active">Active</span> : <span className="badge-inactive">Inactive</span>}</td>
+                  <td>{new Date(b.created_at).toLocaleString()}</td>
+                  <td>{new Date(b.updated_at).toLocaleString()}</td>
+                  <td>
+                    <div className="row" style={{ gap: 4 }}>
+                      <button className="btn-icon" title="Toggle status" onClick={() => toggle(b.id)}>⏻</button>
+                      <button className="btn-icon" title="Edit" onClick={() => edit(b)}>✎</button>
+                      <button className="btn-icon" title="Delete" style={{ color: "#dc2626" }} onClick={() => del(b.id)}>🗑</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length && (
+                <tr><td colSpan={7} style={{ textAlign: "center", color: "#9ca3af", padding: 32 }}>No brands yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ImagePicker({ title, sub, value, onChange, inputRef }: any) {
+  async function pick(f: File | undefined) {
+    if (!f) return;
+    onChange(await fileToDataUrl(f));
+  }
+  return (
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 14, background: "#fafafa" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", letterSpacing: "0.05em" }}>{title.toUpperCase()}</div>
+      <div style={{ color: "#6b7280", fontSize: 12, margin: "4px 0 10px" }}>{sub}</div>
+      {value
+        ? <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <img src={value} style={{ height: 60, borderRadius: 6, border: "1px solid #e5e7eb" }} />
+            <button type="button" className="btn-outline" onClick={() => { onChange(null); if (inputRef.current) inputRef.current.value=""; }}>Remove</button>
+          </div>
+        : <button type="button" className="btn-outline" onClick={() => inputRef.current?.click()} style={{ width: "100%" }}>↑ Upload Image</button>}
+      <input ref={inputRef} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
+    </div>
+  );
+}
