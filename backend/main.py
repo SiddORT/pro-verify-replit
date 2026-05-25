@@ -432,6 +432,13 @@ def dashboard_stats(db: Session = Depends(get_db), admin=Depends(current_admin))
     }
 
 
+@app.get("/api/public/stats")
+def public_stats(db: Session = Depends(get_db)):
+    codes = db.execute(text("SELECT COUNT(*) FROM product_codes")).scalar() or 0
+    verifs = db.execute(text("SELECT COUNT(*) FROM verification_logs")).scalar() or 0
+    return {"codes": int(codes), "verifications": int(verifs), "uptime": "99.9%"}
+
+
 @app.get("/")
 def root():
     return {"service": "PROverify API", "status": "ok"}
