@@ -435,8 +435,131 @@ def dashboard_stats(db: Session = Depends(get_db), admin=Depends(current_admin))
 @app.get("/api/public/stats")
 def public_stats(db: Session = Depends(get_db)):
     codes = db.execute(text("SELECT COUNT(*) FROM product_codes")).scalar() or 0
-    verifs = db.execute(text("SELECT COUNT(*) FROM verification_logs")).scalar() or 0
+    verifs = db.execute(text("SELECT COUNT(*) FROM verification_logs WHERE is_valid=TRUE")).scalar() or 0
     return {"codes": int(codes), "verifications": int(verifs), "uptime": "99.9%"}
+
+
+@app.get("/api/public/brands/{slug}")
+def public_brand(slug: str, db: Session = Depends(get_db)):
+    r = db.execute(
+        text("SELECT id, name, slug, primary_color, desktop_image, mobile_image FROM brands WHERE slug=:s AND is_active=TRUE"),
+        {"s": slug},
+    ).first()
+    if not r:
+        raise HTTPException(404, "Brand not found")
+    return {"id": r[0], "name": r[1], "slug": r[2], "primary_color": r[3],
+            "desktop_image": r[4], "mobile_image": r[5]}
+
+
+class VerifyIn(BaseModel):
+    slug: str
+    code: str
+
+
+_rate_buckets: dict = {}
+
+
+def _rate_limit(ip: Optional[str], max_per_minute: int = 30) -> bool:
+    if not ip:
+        return True
+    now = dt.datetime.utcnow().timestamp()
+    window = 60.0
+    hits = [t for t in _rate_buckets.get(ip, []) if now - t < window]
+    if len(hits) >= max_per_minute:
+        _rate_buckets[ip] = hits
+        return False
+    hits.append(now)
+    _rate_buckets[ip] = hits
+    return True
+
+
+@app.post("/api/public/verify")
+def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db)):
+    code = (data.code or "").strip()
+    slug = (data.slug or "").strip()
+    if not code or len(code) > 255:
+        raise HTTPException(400, "Invalid code")
+    if not slug or len(slug) > 255:
+        raise HTTPException(400, "Invalid slug")
+    ip = request.client.host if request.client else None
+    if not _rate_limit(ip):
+        raise HTTPException(429, "Too many requests, please slow down")
+    ua = request.headers.get("user-agent")
+
+    brand = db.execute(
+        text("SELECT id, name FROM brands WHERE slug=:s AND is_active=TRUE"),
+        {"s": slug},
+    ).first()
+    if not brand:
+        raise HTTPException(404, "Brand not found")
+
+    # Lock the product_code row so concurrent verifies for the same code
+    # serialize, preventing two requests from both being classified as "first".
+    pc = db.execute(
+        text("SELECT id FROM product_codes WHERE code=:c AND brand_id=:b FOR UPDATE"),
+        {"c": code, "b": brand[0]},
+    ).first()
+    if not pc:
+        db.execute(
+            text("""INSERT INTO verification_logs (code, brand_id, ip_address, user_agent, is_valid)
+                    VALUES (:c,:b,:ip,:ua,FALSE)"""),
+            {"c": code, "b": brand[0], "ip": ip, "ua": ua},
+        )
+        db.commit()
+        return {"status": "invalid", "brand": brand[1]}
+
+    prior = db.execute(
+        text("""SELECT created_at FROM verification_logs
+                WHERE code=:c AND brand_id=:b AND is_valid=TRUE
+                ORDER BY created_at ASC"""),
+        {"c": code, "b": brand[0]},
+    ).all()
+    now = dt.datetime.utcnow()
+    db.execute(
+        text("""INSERT INTO verification_logs (code, brand_id, ip_address, user_agent, is_valid)
+                VALUES (:c,:b,:ip,:ua,TRUE)"""),
+        {"c": code, "b": brand[0], "ip": ip, "ua": ua},
+    )
+    db.commit()
+    if not prior:
+        return {"status": "first", "brand": brand[1], "code": code,
+                "verified_at": now.isoformat(), "history": []}
+    return {"status": "repeat", "brand": brand[1], "code": code,
+            "first_verified_at": prior[0][0].isoformat(),
+            "current_scan_at": now.isoformat(),
+            "history": [r[0].isoformat() for r in prior]}
+
+
+@app.get("/api/activity")
+def activity(
+    brand_id: Optional[int] = None,
+    valid: Optional[str] = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    where = ["1=1"]
+    params: dict = {"l": max(1, min(limit, 1000))}
+    if brand_id:
+        where.append("v.brand_id=:b")
+        params["b"] = brand_id
+    if valid == "true":
+        where.append("v.is_valid=TRUE")
+    elif valid == "false":
+        where.append("v.is_valid=FALSE")
+    rows = db.execute(
+        text(f"""SELECT v.id, v.code, v.is_valid, v.created_at, v.ip_address, br.name
+                 FROM verification_logs v LEFT JOIN brands br ON br.id=v.brand_id
+                 WHERE {" AND ".join(where)}
+                 ORDER BY v.id DESC LIMIT :l"""),
+        params,
+    ).all()
+    return [
+        {"id": r[0], "code": r[1], "is_valid": r[2],
+         "created_at": r[3].isoformat() if r[3] else None,
+         "ip": r[4], "brand": r[5]}
+        for r in rows
+    ]
 
 
 @app.get("/")
