@@ -2,10 +2,13 @@ import os
 import io
 import re
 import datetime as dt
+from pathlib import Path
 from typing import Optional, List
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
@@ -846,6 +849,44 @@ def reset_data(
     return {"ok": True, "wiped_by": admin["email"], "row_counts": counts}
 
 
-@app.get("/")
-def root():
+@app.get("/api")
+def api_root():
     return {"service": "PROverify API", "status": "ok"}
+
+
+# Serve the built React SPA. In production the deployment build step runs
+# `npm run build` which writes static assets into `frontend/dist`. When that
+# directory exists we mount it and add a catch-all so client-side routes
+# (/login, /brands, /verify/<slug>, ...) all return index.html.
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if _FRONTEND_DIST.is_dir():
+    _INDEX_HTML = _FRONTEND_DIST / "index.html"
+    app.mount(
+        "/assets",
+        StaticFiles(directory=_FRONTEND_DIST / "assets"),
+        name="assets",
+    )
+
+    @app.get("/")
+    def _spa_root():
+        return FileResponse(_INDEX_HTML)
+
+    @app.get("/{full_path:path}")
+    def _spa_catch_all(full_path: str):
+        # Never hijack API routes — let FastAPI return its own 404 for them.
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        # Serve a real file from dist if one exists (favicon.svg, vite.svg, ...).
+        candidate = _FRONTEND_DIST / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        # Otherwise fall back to the SPA shell so React Router can handle it.
+        return FileResponse(_INDEX_HTML)
+else:
+    @app.get("/")
+    def _root_dev():
+        return {
+            "service": "PROverify API",
+            "status": "ok",
+            "note": "frontend/dist not built; run `npm run build` for production",
+        }
