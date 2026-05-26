@@ -25,6 +25,14 @@ type Code = {
   last_verified_at: string | null;
 };
 
+type LogEntry = {
+  id: number;
+  is_valid: boolean;
+  created_at: string;
+  ip: string | null;
+  user_agent: string | null;
+};
+
 const PAGE_SIZE = 20;
 
 export default function BatchDetails() {
@@ -40,6 +48,18 @@ export default function BatchDetails() {
   const [searchDebounced, setSearchDebounced] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [codesLoading, setCodesLoading] = useState(false);
+  const [logsFor, setLogsFor] = useState<Code | null>(null);
+  const [logs, setLogs] = useState<LogEntry[] | null>(null);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!logsFor) { setLogs(null); return; }
+    setLogsLoading(true);
+    api.get(`/api/codes/${logsFor.id}/logs`)
+      .then((r) => setLogs(r.data.items || []))
+      .catch(() => { toast("Could not load logs", "error"); setLogs([]); })
+      .finally(() => setLogsLoading(false));
+  }, [logsFor]);
 
   useEffect(() => {
     if (!id) return;
@@ -162,13 +182,14 @@ export default function BatchDetails() {
                       <th style={{ textAlign: "right" }}>Verifications</th>
                       <th>Last Verified</th>
                       <th>Status</th>
+                      <th style={{ textAlign: "right" }}>Logs</th>
                     </tr>
                   </thead>
                   <tbody>
                     {codesLoading && codes.length === 0 ? (
-                      <tr><td colSpan={5} style={{ textAlign: "center", padding: 36, color: "#9ca3af" }}>Loading…</td></tr>
+                      <tr><td colSpan={6} style={{ textAlign: "center", padding: 36, color: "#9ca3af" }}>Loading…</td></tr>
                     ) : codes.length === 0 ? (
-                      <tr><td colSpan={5} style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                      <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
                         <div style={{ fontSize: 26, opacity: 0.4, marginBottom: 6 }}>🔍</div>
                         {search || verifiedOnly ? "No codes match these filters." : "This batch has no codes."}
                       </td></tr>
@@ -194,6 +215,27 @@ export default function BatchDetails() {
                             ? <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>Verified</span>
                             : <span style={{ background: "#f3f4f6", color: "#6b7280", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>Pending</span>}
                         </td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            type="button"
+                            onClick={() => setLogsFor(c)}
+                            disabled={c.verification_count === 0}
+                            title={c.verification_count === 0 ? "No verifications yet" : "View verification logs"}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: 6,
+                              padding: "5px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              border: "1px solid " + (c.verification_count > 0 ? "#1b5e20" : "#e5e7eb"),
+                              background: c.verification_count > 0 ? "#fff" : "#f9fafb",
+                              color: c.verification_count > 0 ? "#1b5e20" : "#9ca3af",
+                              cursor: c.verification_count > 0 ? "pointer" : "not-allowed",
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z"/>
+                            </svg>
+                            View
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -215,8 +257,137 @@ export default function BatchDetails() {
           </>
         )}
       </div>
+
+      {logsFor && (
+        <LogsModal
+          code={logsFor}
+          logs={logs}
+          loading={logsLoading}
+          onClose={() => setLogsFor(null)}
+        />
+      )}
     </>
   );
+}
+
+function LogsModal({ code, logs, loading, onClose }: {
+  code: Code; logs: LogEntry[] | null; loading: boolean; onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 100, padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff", borderRadius: 12, width: "100%", maxWidth: 820,
+          maxHeight: "85vh", display: "flex", flexDirection: "column",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+        }}
+      >
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f2f4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Verification Logs</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="code-pill">{code.code}</span>
+              <span style={{ color: "#6b7280", fontSize: 13, fontWeight: 400 }}>
+                · {code.verification_count.toLocaleString()} valid verification{code.verification_count === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 18, color: "#6b7280" }}
+            title="Close"
+          >×</button>
+        </div>
+
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Loading logs…</div>
+          ) : !logs || logs.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
+              <div style={{ fontSize: 28, opacity: 0.4, marginBottom: 8 }}>📋</div>
+              No verification logs found for this code.
+            </div>
+          ) : (
+            <table className="table" style={{ width: "100%" }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 48 }}>#</th>
+                  <th>When</th>
+                  <th>Result</th>
+                  <th>IP Address</th>
+                  <th>Device / User Agent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((l, i) => (
+                  <tr key={l.id}>
+                    <td style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
+                    <td style={{ fontSize: 13 }}>
+                      <div>{fmtDate(l.created_at)}</div>
+                      <div style={{ fontSize: 11, color: "#6b7280" }}>{fmtRel(l.created_at)}</div>
+                    </td>
+                    <td>
+                      {l.is_valid
+                        ? <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>✓ Valid</span>
+                        : <span style={{ background: "#fee2e2", color: "#991b1b", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>✕ Invalid</span>}
+                    </td>
+                    <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: "#374151" }}>
+                      {l.ip || <span style={{ color: "#9ca3af" }}>—</span>}
+                    </td>
+                    <td style={{ fontSize: 12, color: "#6b7280", maxWidth: 280, wordBreak: "break-word" }}>
+                      {l.user_agent ? shortUA(l.user_agent) : <span style={{ color: "#9ca3af" }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f2f4", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>
+            {logs && logs.length >= 200 && "Showing most recent 200 entries"}
+          </span>
+          <button type="button" className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function shortUA(ua: string): string {
+  let device = "Unknown";
+  if (/iPhone|iPad/i.test(ua)) device = "iOS";
+  else if (/Android/i.test(ua)) device = "Android";
+  else if (/Windows/i.test(ua)) device = "Windows";
+  else if (/Macintosh|Mac OS/i.test(ua)) device = "macOS";
+  else if (/Linux/i.test(ua)) device = "Linux";
+
+  let browser = "";
+  if (/Edg\//i.test(ua)) browser = "Edge";
+  else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) browser = "Chrome";
+  else if (/Firefox\//i.test(ua)) browser = "Firefox";
+  else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = "Safari";
+
+  const label = [device, browser].filter(Boolean).join(" · ");
+  return label ? `${label} — ${ua.slice(0, 60)}${ua.length > 60 ? "…" : ""}` : ua;
 }
 
 function StatTile({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {

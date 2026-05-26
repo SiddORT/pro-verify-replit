@@ -555,6 +555,43 @@ def batch_codes(
     }
 
 
+@app.get("/api/codes/{code_id}/logs")
+def code_logs(
+    code_id: int,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    limit = min(max(limit, 1), 1000)
+    pc = db.execute(text("""
+        SELECT pc.id, pc.code, pc.brand_id, br.name, br.slug
+        FROM product_codes pc LEFT JOIN brands br ON br.id = pc.brand_id
+        WHERE pc.id = :i
+    """), {"i": code_id}).first()
+    if not pc:
+        raise HTTPException(404, "Code not found")
+    rows = db.execute(text("""
+        SELECT id, is_valid, created_at, ip_address, user_agent
+        FROM verification_logs
+        WHERE code = :c AND brand_id = :b
+        ORDER BY created_at DESC, id DESC
+        LIMIT :l
+    """), {"c": pc[1], "b": pc[2], "l": limit}).all()
+    return {
+        "code": pc[1],
+        "brand_name": pc[3],
+        "brand_slug": pc[4],
+        "total": len(rows),
+        "items": [
+            {
+                "id": r[0], "is_valid": r[1],
+                "created_at": r[2].isoformat() if r[2] else None,
+                "ip": r[3], "user_agent": r[4],
+            } for r in rows
+        ],
+    }
+
+
 @app.delete("/api/batches/{batch_id}")
 def delete_batch(batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
     db.execute(text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id})
