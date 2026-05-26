@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import Brands from "./pages/Brands";
 import Upload from "./pages/Upload";
 import BatchUploads from "./pages/BatchUploads";
+import BatchDetails from "./pages/BatchDetails";
 import Activity from "./pages/Activity";
 import Verify from "./pages/Verify";
 import { RequireAuth } from "./auth";
@@ -17,6 +18,7 @@ export default function App() {
       <Route path="/brands" element={<RequireAuth><Brands /></RequireAuth>} />
       <Route path="/upload" element={<RequireAuth><Upload /></RequireAuth>} />
       <Route path="/batches" element={<RequireAuth><BatchUploads /></RequireAuth>} />
+      <Route path="/batches/:id" element={<RequireAuth><BatchDetails /></RequireAuth>} />
       <Route path="/activity" element={<RequireAuth><Activity /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

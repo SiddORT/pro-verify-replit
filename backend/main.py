@@ -460,6 +460,101 @@ def list_batches(
     }
 
 
+@app.get("/api/batches/{batch_id}")
+def batch_detail(batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
+    row = db.execute(text("""
+        SELECT b.id, b.batch_number, b.file_name, b.codes_uploaded, b.created_at,
+               br.id, br.name, br.slug
+        FROM upload_batches b JOIN brands br ON br.id=b.brand_id
+        WHERE b.id=:i
+    """), {"i": batch_id}).first()
+    if not row:
+        raise HTTPException(404, "Batch not found")
+    # Aggregate verification stats: count valid-scan logs against codes in this batch.
+    stats = db.execute(text("""
+        SELECT
+            COUNT(v.id) FILTER (WHERE v.is_valid = TRUE) AS total_verifications,
+            COUNT(DISTINCT v.code) FILTER (WHERE v.is_valid = TRUE) AS codes_verified,
+            MAX(v.created_at) FILTER (WHERE v.is_valid = TRUE) AS last_verified_at
+        FROM product_codes pc
+        LEFT JOIN verification_logs v
+          ON v.code = pc.code AND v.brand_id = pc.brand_id
+        WHERE pc.batch_id = :i
+    """), {"i": batch_id}).first()
+    return {
+        "id": row[0], "batch_number": row[1], "file_name": row[2],
+        "codes_uploaded": row[3],
+        "created_at": row[4].isoformat() if row[4] else None,
+        "brand_id": row[5], "brand_name": row[6], "brand_slug": row[7],
+        "total_verifications": int(stats[0] or 0),
+        "codes_verified": int(stats[1] or 0),
+        "last_verified_at": stats[2].isoformat() if stats[2] else None,
+    }
+
+
+@app.get("/api/batches/{batch_id}/codes")
+def batch_codes(
+    batch_id: int,
+    search: Optional[str] = None,
+    verified_only: bool = False,
+    limit: int = 25,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    exists = db.execute(text("SELECT 1 FROM upload_batches WHERE id=:i"), {"i": batch_id}).first()
+    if not exists:
+        raise HTTPException(404, "Batch not found")
+    where = ["pc.batch_id = :i"]
+    params: dict = {"i": batch_id}
+    if search:
+        where.append("pc.code ILIKE :q")
+        params["q"] = f"%{search}%"
+    having = ""
+    if verified_only:
+        having = "HAVING COUNT(v.id) FILTER (WHERE v.is_valid = TRUE) > 0"
+    w = " AND ".join(where)
+    total = db.execute(text(f"""
+        SELECT COUNT(*) FROM (
+            SELECT pc.id
+            FROM product_codes pc
+            LEFT JOIN verification_logs v ON v.code = pc.code AND v.brand_id = pc.brand_id
+            WHERE {w}
+            GROUP BY pc.id
+            {having}
+        ) t
+    """), params).scalar() or 0
+    params["lim"] = limit
+    params["off"] = offset
+    rows = db.execute(text(f"""
+        SELECT pc.id, pc.code, pc.created_at,
+               COUNT(v.id) FILTER (WHERE v.is_valid = TRUE) AS verification_count,
+               MAX(v.created_at) FILTER (WHERE v.is_valid = TRUE) AS last_verified_at
+        FROM product_codes pc
+        LEFT JOIN verification_logs v ON v.code = pc.code AND v.brand_id = pc.brand_id
+        WHERE {w}
+        GROUP BY pc.id
+        {having}
+        ORDER BY verification_count DESC, pc.id ASC
+        LIMIT :lim OFFSET :off
+    """), params).all()
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [
+            {
+                "id": r[0], "code": r[1],
+                "created_at": r[2].isoformat() if r[2] else None,
+                "verification_count": int(r[3] or 0),
+                "last_verified_at": r[4].isoformat() if r[4] else None,
+            } for r in rows
+        ],
+    }
+
+
 @app.delete("/api/batches/{batch_id}")
 def delete_batch(batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
     db.execute(text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id})

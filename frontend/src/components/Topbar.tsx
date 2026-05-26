@@ -23,63 +23,122 @@ export default function Topbar() {
       <Link to="/" className="brand-logo">
         <span className="pro">PRO</span><span className="verify">verify</span>
       </Link>
-      <div className="row" style={{ gap: 18, fontSize: 14 }}>
-        <Link to="/" className="btn-outline">Dashboard</Link>
-        <Link to="/brands" className="btn-outline">Brands</Link>
+      <div className="row" style={{ gap: 8, fontSize: 14 }}>
+        <NavLink to="/" label="Dashboard" active={loc.pathname === "/"} />
+        <NavLink to="/brands" label="Brands" active={loc.pathname.startsWith("/brands")} />
         <div ref={ref} style={{ position: "relative" }}>
           <button
             type="button"
-            className="btn-outline"
             onClick={() => setOpen((v) => !v)}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              background: onUploads ? "#e8f3ea" : undefined,
-              borderColor: onUploads ? "#1b5e20" : undefined,
-              color: onUploads ? "#1b5e20" : undefined,
-              fontWeight: onUploads ? 600 : 500,
+              padding: "7px 12px", borderRadius: 8, cursor: "pointer",
+              border: "1px solid " + (onUploads ? "#1b5e20" : "transparent"),
+              background: onUploads ? "#e8f3ea" : "transparent",
+              color: onUploads ? "#1b5e20" : "#374151",
+              fontWeight: onUploads ? 600 : 500, fontSize: 14,
             }}
+            onMouseEnter={(e) => { if (!onUploads) e.currentTarget.style.background = "#f3f4f6"; }}
+            onMouseLeave={(e) => { if (!onUploads) e.currentTarget.style.background = "transparent"; }}
           >
             Uploads
-            <span style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
+            <span style={{
+              fontSize: 10, transition: "transform 0.15s",
+              transform: open ? "rotate(180deg)" : "rotate(0)",
+            }}>▾</span>
           </button>
           {open && (
             <div style={{
-              position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 220,
-              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
-              boxShadow: "0 12px 28px rgba(0,0,0,0.10)", padding: 6, zIndex: 50,
+              position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 260,
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              boxShadow: "0 16px 36px rgba(0,0,0,0.12)", padding: 8, zIndex: 50,
             }}>
-              <MenuItem to="/upload" title="Upload New Codes" desc="Add a new .xlsx batch" icon="⬆" />
-              <MenuItem to="/batches" title="Batch Uploads" desc="View, search, manage history" icon="📋" />
+              <MenuItem
+                to="/upload" title="Upload New Codes"
+                desc="Add a fresh .xlsx batch" icon={UploadIcon}
+                active={loc.pathname === "/upload"}
+              />
+              <MenuItem
+                to="/batches" title="Batch Uploads"
+                desc="Browse, search & manage history" icon={ListIcon}
+                active={loc.pathname.startsWith("/batches")}
+              />
             </div>
           )}
         </div>
-        <Link to="/activity" className="btn-outline">Activity</Link>
-        <span style={{ color: "#374151" }}>{email || "--"}</span>
+        <NavLink to="/activity" label="Activity" active={loc.pathname.startsWith("/activity")} />
+        <div style={{ width: 1, height: 22, background: "#e5e7eb", margin: "0 6px" }} />
+        <span style={{ color: "#374151", fontSize: 13 }}>{email || "--"}</span>
         <button className="btn-outline" style={{ color: "#dc2626" }} onClick={logout}>Logout</button>
       </div>
     </div>
   );
 }
 
-function MenuItem({ to, title, desc, icon }: { to: string; title: string; desc: string; icon: string }) {
+function NavLink({ to, label, active }: { to: string; label: string; active: boolean }) {
   return (
     <Link
       to={to}
       style={{
-        display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px",
-        borderRadius: 6, textDecoration: "none", color: "#111",
+        padding: "7px 12px", borderRadius: 8, textDecoration: "none", fontSize: 14,
+        border: "1px solid " + (active ? "#1b5e20" : "transparent"),
+        background: active ? "#e8f3ea" : "transparent",
+        color: active ? "#1b5e20" : "#374151",
+        fontWeight: active ? 600 : 500,
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#f3f4f6")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "#f3f4f6"; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+    >{label}</Link>
+  );
+}
+
+function MenuItem({ to, title, desc, icon: Icon, active }: { to: string; title: string; desc: string; icon: () => JSX.Element; active: boolean }) {
+  return (
+    <Link
+      to={to}
+      style={{
+        display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 12px",
+        borderRadius: 8, textDecoration: "none", color: "#111",
+        background: active ? "#f0fdf4" : "transparent",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = active ? "#dcfce7" : "#f9fafb")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = active ? "#f0fdf4" : "transparent")}
     >
       <span style={{
-        width: 32, height: 32, borderRadius: 8, background: "#e8f3ea", color: "#1b5e20",
-        display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0,
-      }}>{icon}</span>
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
-        <div style={{ fontSize: 11, color: "#6b7280" }}>{desc}</div>
+        width: 36, height: 36, borderRadius: 8,
+        background: active ? "#1b5e20" : "#e8f3ea",
+        color: active ? "#fff" : "#1b5e20",
+        display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+      }}><Icon /></span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#111", display: "flex", alignItems: "center", gap: 6 }}>
+          {title}
+          {active && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1b5e20" }} />}
+        </div>
+        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{desc}</div>
       </div>
     </Link>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+  );
+}
+function ListIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6"/>
+      <line x1="8" y1="12" x2="21" y2="12"/>
+      <line x1="8" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="3.01" y2="6"/>
+      <line x1="3" y1="12" x2="3.01" y2="12"/>
+      <line x1="3" y1="18" x2="3.01" y2="18"/>
+    </svg>
   );
 }
