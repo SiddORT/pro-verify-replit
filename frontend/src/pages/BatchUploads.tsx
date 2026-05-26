@@ -130,6 +130,7 @@ export default function BatchUploads() {
             <table className="table" style={{ minWidth: 880 }}>
               <thead>
                 <tr>
+                  <th style={{ width: 56 }}>Sr No</th>
                   <th>Batch Number</th>
                   <th>Brand</th>
                   <th>File</th>
@@ -140,17 +141,18 @@ export default function BatchUploads() {
               </thead>
               <tbody>
                 {loading && items.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "#9ca3af" }}>Loading…</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "#9ca3af" }}>Loading…</td></tr>
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: "center", padding: 50, color: "#6b7280" }}>
+                  <tr><td colSpan={7} style={{ textAlign: "center", padding: 50, color: "#6b7280" }}>
                     <div style={{ fontSize: 30, marginBottom: 6, opacity: 0.4 }}>📭</div>
                     <div style={{ fontWeight: 600, marginBottom: 4 }}>No batches found</div>
                     <div style={{ fontSize: 13 }}>
                       {search || brandFilter ? "Try a different search or filter." : <>Get started by <Link to="/upload" style={{ color: "#1b5e20", fontWeight: 600 }}>uploading codes →</Link></>}
                     </div>
                   </td></tr>
-                ) : items.map((b) => (
+                ) : items.map((b, i) => (
                   <tr key={b.id}>
+                    <td style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>{page * PAGE_SIZE + i + 1}</td>
                     <td><span className="code-pill">{b.batch_number}</span></td>
                     <td>
                       <div style={{ fontWeight: 500 }}>{b.brand_name}</div>

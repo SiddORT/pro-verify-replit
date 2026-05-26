@@ -110,7 +110,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b, i) => (
+              {filtered.slice(0, 5).map((b, i) => (
                 <tr key={b.id}>
                   <td>{i + 1}</td>
                   <td>{new Date(b.created_at).toLocaleString()}</td>
@@ -126,6 +126,19 @@ export default function Dashboard() {
               )}
             </tbody>
           </table>
+          {filtered.length > 5 && (
+            <div style={{
+              padding: "14px 4px 0", display: "flex", alignItems: "center",
+              justifyContent: "space-between", borderTop: "1px solid #f1f2f4", marginTop: 4,
+            }}>
+              <div style={{ fontSize: 13, color: "#6b7280" }}>
+                Showing 5 of {filtered.length.toLocaleString()} batches
+              </div>
+              <Link to="/batches" style={{ color: "#1b5e20", fontWeight: 600, textDecoration: "none", fontSize: 13 }}>
+                Show more →
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </>
