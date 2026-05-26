@@ -80,6 +80,13 @@ def get_db():
 
 
 def seed_admin():
+    """Idempotently ensure the default admin exists.
+
+    This is the only seed run on startup. All other tables (brands,
+    product_codes, upload_batches, verification_logs) are intentionally
+    left empty so each environment starts clean and is populated only
+    through the admin UI (Brands page + Upload xlsx flow).
+    """
     db = SessionLocal()
     try:
         row = db.execute(text("SELECT id FROM admins WHERE email=:e"), {"e": "admin@proverify.com"}).first()
@@ -813,6 +820,30 @@ def activity(
          "ip": r[4], "brand": r[5]}
         for r in rows
     ]
+
+
+@app.post("/api/admin/reset-data")
+def reset_data(
+    confirm: str,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    """Destructive: wipe ALL brands, codes, batches and verification logs.
+
+    Keeps the `admins` table intact. Requires the literal confirmation string
+    ``RESET-ALL-DATA`` to be sent as a query parameter to prevent accidents.
+    """
+    if confirm != "RESET-ALL-DATA":
+        raise HTTPException(400, "Missing or invalid confirmation token")
+    db.execute(text(
+        "TRUNCATE TABLE verification_logs, product_codes, upload_batches, brands "
+        "RESTART IDENTITY CASCADE"
+    ))
+    db.commit()
+    counts = {}
+    for tbl in ("admins", "brands", "product_codes", "upload_batches", "verification_logs"):
+        counts[tbl] = db.execute(text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
+    return {"ok": True, "wiped_by": admin["email"], "row_counts": counts}
 
 
 @app.get("/")
