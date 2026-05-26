@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
 import ConfirmModal from "../components/ConfirmModal";
+import RowActions from "../components/RowActions";
 import { useToast } from "../components/Toast";
 import { fmtIST } from "../utils/time";
 
@@ -22,7 +23,6 @@ const PAGE_SIZE = 15;
 export default function BatchUploads() {
   const toast = useToast();
   const navigate = useNavigate();
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [items, setItems] = useState<Batch[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -48,7 +48,7 @@ export default function BatchUploads() {
     if (searchDebounced) params.search = searchDebounced;
     if (brandFilter) params.brand_id = brandFilter;
     api.get("/api/batches", { params })
-      .then((r) => { setItems(r.data.items || []); setTotal(r.data.total || 0); })
+      .then((r) => { setItems(Array.isArray(r.data?.items) ? r.data.items : []); setTotal(Number.isFinite(r.data?.total) ? r.data.total : 0); })
       .catch(() => toast("Could not load batches", "error"))
       .finally(() => setLoading(false));
   }, [page, searchDebounced, brandFilter]);
@@ -66,7 +66,7 @@ export default function BatchUploads() {
         if (searchDebounced) params.search = searchDebounced;
         if (brandFilter) params.brand_id = brandFilter;
         const r = await api.get("/api/batches", { params });
-        setItems(r.data.items || []); setTotal(r.data.total || 0);
+        setItems(Array.isArray(r.data?.items) ? r.data.items : []); setTotal(Number.isFinite(r.data?.total) ? r.data.total : 0);
       }
     } catch {
       toast("Delete failed", "error");
@@ -168,11 +168,8 @@ export default function BatchUploads() {
                     <td style={{ color: "#6b7280", fontSize: 13 }}>{fmtDate(b.created_at)}</td>
                     <td style={{ textAlign: "right" }}>
                       <RowActions
-                        open={openMenu === b.id}
-                        onToggle={() => setOpenMenu(openMenu === b.id ? null : b.id)}
-                        onClose={() => setOpenMenu(null)}
-                        onDetails={() => { setOpenMenu(null); navigate(`/batches/${b.id}`); }}
-                        onDelete={() => { setOpenMenu(null); setConfirmDel(b); }}
+                        onDetails={() => navigate(`/batches/${b.id}`)}
+                        onDelete={() => setConfirmDel(b)}
                       />
                     </td>
                   </tr>
@@ -211,66 +208,6 @@ export default function BatchUploads() {
         onCancel={() => setConfirmDel(null)}
       />
     </>
-  );
-}
-
-function RowActions({ open, onToggle, onClose, onDetails, onDelete }: {
-  open: boolean; onToggle: () => void; onClose: () => void;
-  onDetails: () => void; onDelete: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, onClose]);
-  return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <button
-        type="button"
-        onClick={onToggle}
-        title="Actions"
-        style={{
-          width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb",
-          background: open ? "#f3f4f6" : "#fff", cursor: "pointer", color: "#374151",
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
-          fontSize: 18, lineHeight: 1, padding: 0,
-        }}
-      >⋯</button>
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", right: 0, minWidth: 170,
-          background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8,
-          boxShadow: "0 10px 24px rgba(0,0,0,0.10)", padding: 6, zIndex: 20, textAlign: "left",
-        }}>
-          <MenuRow icon="👁" label="View Details" onClick={onDetails} />
-          <div style={{ height: 1, background: "#f1f2f4", margin: "4px 0" }} />
-          <MenuRow icon="🗑" label="Delete Batch" onClick={onDelete} danger />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MenuRow({ icon, label, onClick, danger }: { icon: string; label: string; onClick: () => void; danger?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-        borderRadius: 6, border: "none", background: "transparent", cursor: "pointer",
-        width: "100%", textAlign: "left",
-        color: danger ? "#dc2626" : "#111", fontSize: 13, fontWeight: 500,
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? "#fef2f2" : "#f3f4f6")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <span style={{ fontSize: 14 }}>{icon}</span> {label}
-    </button>
   );
 }
 

@@ -23,7 +23,7 @@ export default function Activity() {
       if (brandId) params.brand_id = brandId;
       if (valid) params.valid = valid;
       const r = await api.get("/api/activity", { params });
-      setRows(r.data);
+      setRows(Array.isArray(r.data) ? r.data : (r.data?.items || []));
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [brandId, valid]);

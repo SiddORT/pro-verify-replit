@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
+import RowActions from "../components/RowActions";
+import ConfirmModal from "../components/ConfirmModal";
+import { useToast } from "../components/Toast";
 import { fmtIST } from "../utils/time";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, LabelList,
@@ -11,9 +14,12 @@ import {
 const COLORS = ["#1b5e20", "#388e3c", "#66bb6a", "#a5d6a7", "#c8e6c9", "#81c784"];
 
 export default function Dashboard() {
+  const nav = useNavigate();
+  const toast = useToast();
   const [stats, setStats] = useState<any>(null);
   const [batches, setBatches] = useState<any[]>([]);
   const [q, setQ] = useState("");
+  const [toDelete, setToDelete] = useState<any | null>(null);
 
   async function load() {
     const [s, b] = await Promise.all([api.get("/api/dashboard/stats"), api.get("/api/batches", { params: { limit: 200 } })]);
@@ -22,10 +28,16 @@ export default function Dashboard() {
   }
   useEffect(() => { load(); }, []);
 
-  async function del(id: number) {
-    if (!confirm("Delete this batch and all its codes?")) return;
-    await api.delete(`/api/batches/${id}`);
-    load();
+  async function confirmDelete() {
+    if (!toDelete) return;
+    try {
+      await api.delete(`/api/batches/${toDelete.id}`);
+      toast(`Deleted batch ${toDelete.batch_number}`);
+      setToDelete(null);
+      load();
+    } catch {
+      toast("Delete failed", "error");
+    }
   }
 
   const filtered = batches.filter(
@@ -120,7 +132,12 @@ export default function Dashboard() {
                   <td>{b.file_name}</td>
                   <td>{b.codes_uploaded}</td>
                   <td>{b.brand_name}</td>
-                  <td><button className="btn-danger" onClick={() => del(b.id)}>Delete</button></td>
+                  <td style={{ textAlign: "right" }}>
+                    <RowActions
+                      onDetails={() => nav(`/batches/${b.id}`)}
+                      onDelete={() => setToDelete(b)}
+                    />
+                  </td>
                 </tr>
               ))}
               {!filtered.length && (
@@ -144,6 +161,16 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!toDelete}
+        title="Delete this batch?"
+        message={toDelete ? `This will permanently delete batch "${toDelete.batch_number}" and all ${(toDelete.codes_uploaded ?? 0).toLocaleString()} of its codes. This cannot be undone.` : ""}
+        confirmText="Delete Batch"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </>
   );
 }
