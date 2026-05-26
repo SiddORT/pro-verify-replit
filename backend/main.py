@@ -4,7 +4,16 @@ import re
 import datetime as dt
 from pathlib import Path
 from typing import Optional, List
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request, status
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+    Request,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer
@@ -52,6 +61,7 @@ def verify_password(p: str, h: str) -> bool:
     except Exception:
         return False
 
+
 app = FastAPI(title="PROverify API")
 
 
@@ -64,24 +74,36 @@ def _ensure_schema_constraints() -> None:
     fresh environment without requiring an out-of-band migration.
     """
     from sqlalchemy import text as _text
+
     with engine.begin() as conn:
-        exists = conn.execute(_text(
-            "SELECT 1 FROM pg_constraint WHERE conname = 'product_codes_brand_code_unique'"
-        )).first()
+        exists = conn.execute(
+            _text(
+                "SELECT 1 FROM pg_constraint WHERE conname = 'product_codes_brand_code_unique'"
+            )
+        ).first()
         if exists:
             return
         # Dedupe any pre-existing rows so the constraint can be added cleanly.
-        conn.execute(_text(
-            "DELETE FROM product_codes a USING product_codes b "
-            "WHERE a.ctid < b.ctid AND a.brand_id = b.brand_id AND a.code = b.code"
-        ))
-        conn.execute(_text(
-            "ALTER TABLE product_codes "
-            "ADD CONSTRAINT product_codes_brand_code_unique UNIQUE (brand_id, code)"
-        ))
+        conn.execute(
+            _text(
+                "DELETE FROM product_codes a USING product_codes b "
+                "WHERE a.ctid < b.ctid AND a.brand_id = b.brand_id AND a.code = b.code"
+            )
+        )
+        conn.execute(
+            _text(
+                "ALTER TABLE product_codes "
+                "ADD CONSTRAINT product_codes_brand_code_unique UNIQUE (brand_id, code)"
+            )
+        )
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://proverify.ortdemo.com",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -114,7 +136,9 @@ def seed_admin():
         return
     db = SessionLocal()
     try:
-        row = db.execute(text("SELECT id FROM admins WHERE email=:e"), {"e": email}).first()
+        row = db.execute(
+            text("SELECT id FROM admins WHERE email=:e"), {"e": email}
+        ).first()
         if not row:
             db.execute(
                 text("INSERT INTO admins (email, password_hash) VALUES (:e,:p)"),
@@ -129,11 +153,16 @@ seed_admin()
 
 
 def create_token(email: str) -> str:
-    payload = {"sub": email, "exp": dt.datetime.utcnow() + dt.timedelta(hours=TOKEN_EXPIRE_HOURS)}
+    payload = {
+        "sub": email,
+        "exp": dt.datetime.utcnow() + dt.timedelta(hours=TOKEN_EXPIRE_HOURS),
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def current_admin(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def current_admin(
+    token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)
+):
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
@@ -141,7 +170,9 @@ def current_admin(token: Optional[str] = Depends(oauth2_scheme), db: Session = D
         email = payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    row = db.execute(text("SELECT id, email FROM admins WHERE email=:e"), {"e": email}).first()
+    row = db.execute(
+        text("SELECT id, email FROM admins WHERE email=:e"), {"e": email}
+    ).first()
     if not row:
         raise HTTPException(status_code=401, detail="Admin not found")
     return {"id": row[0], "email": row[1]}
@@ -164,7 +195,10 @@ class BrandIn(BaseModel):
 # ---------- Auth ----------
 @app.post("/api/auth/login")
 def login(data: LoginIn, db: Session = Depends(get_db)):
-    row = db.execute(text("SELECT id, email, password_hash FROM admins WHERE email=:e"), {"e": data.email}).first()
+    row = db.execute(
+        text("SELECT id, email, password_hash FROM admins WHERE email=:e"),
+        {"e": data.email},
+    ).first()
     if not row or not verify_password(data.password, row[2]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_token(row[1])
@@ -199,7 +233,11 @@ def unique_slug(db: Session, base: str, ignore_id: Optional[int] = None) -> str:
 
 # ---------- Brands ----------
 @app.get("/api/brands")
-def list_brands(active_only: bool = False, db: Session = Depends(get_db), admin=Depends(current_admin)):
+def list_brands(
+    active_only: bool = False,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
     q = "SELECT id, name, slug, primary_color, desktop_image, mobile_image, is_active, created_at, updated_at FROM brands"
     if active_only:
         q += " WHERE is_active=TRUE"
@@ -207,52 +245,89 @@ def list_brands(active_only: bool = False, db: Session = Depends(get_db), admin=
     rows = db.execute(text(q)).all()
     return [
         {
-            "id": r[0], "name": r[1], "slug": r[2], "primary_color": r[3],
-            "desktop_image": r[4], "mobile_image": r[5], "is_active": r[6],
+            "id": r[0],
+            "name": r[1],
+            "slug": r[2],
+            "primary_color": r[3],
+            "desktop_image": r[4],
+            "mobile_image": r[5],
+            "is_active": r[6],
             "created_at": r[7].isoformat() if r[7] else None,
             "updated_at": r[8].isoformat() if r[8] else None,
-        } for r in rows
+        }
+        for r in rows
     ]
 
 
 @app.post("/api/brands")
-def create_brand(data: BrandIn, db: Session = Depends(get_db), admin=Depends(current_admin)):
+def create_brand(
+    data: BrandIn, db: Session = Depends(get_db), admin=Depends(current_admin)
+):
     slug = unique_slug(db, slugify(data.name))
     row = db.execute(
         text("""INSERT INTO brands (name, slug, primary_color, desktop_image, mobile_image, is_active)
                 VALUES (:n,:s,:c,:d,:m,:a) RETURNING id"""),
-        {"n": data.name, "s": slug, "c": data.primary_color, "d": data.desktop_image,
-         "m": data.mobile_image, "a": data.is_active},
+        {
+            "n": data.name,
+            "s": slug,
+            "c": data.primary_color,
+            "d": data.desktop_image,
+            "m": data.mobile_image,
+            "a": data.is_active,
+        },
     ).first()
     db.commit()
     return {"id": row[0], "slug": slug}
 
 
 @app.put("/api/brands/{brand_id}")
-def update_brand(brand_id: int, data: BrandIn, db: Session = Depends(get_db), admin=Depends(current_admin)):
-    existing = db.execute(text("SELECT id FROM brands WHERE id=:i"), {"i": brand_id}).first()
+def update_brand(
+    brand_id: int,
+    data: BrandIn,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    existing = db.execute(
+        text("SELECT id FROM brands WHERE id=:i"), {"i": brand_id}
+    ).first()
     if not existing:
         raise HTTPException(404, "Brand not found")
     slug = unique_slug(db, slugify(data.name), ignore_id=brand_id)
     db.execute(
         text("""UPDATE brands SET name=:n, slug=:s, primary_color=:c, desktop_image=:d,
                 mobile_image=:m, is_active=:a, updated_at=NOW() WHERE id=:i"""),
-        {"n": data.name, "s": slug, "c": data.primary_color, "d": data.desktop_image,
-         "m": data.mobile_image, "a": data.is_active, "i": brand_id},
+        {
+            "n": data.name,
+            "s": slug,
+            "c": data.primary_color,
+            "d": data.desktop_image,
+            "m": data.mobile_image,
+            "a": data.is_active,
+            "i": brand_id,
+        },
     )
     db.commit()
     return {"ok": True}
 
 
 @app.patch("/api/brands/{brand_id}/toggle")
-def toggle_brand(brand_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
-    db.execute(text("UPDATE brands SET is_active = NOT is_active, updated_at=NOW() WHERE id=:i"), {"i": brand_id})
+def toggle_brand(
+    brand_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)
+):
+    db.execute(
+        text(
+            "UPDATE brands SET is_active = NOT is_active, updated_at=NOW() WHERE id=:i"
+        ),
+        {"i": brand_id},
+    )
     db.commit()
     return {"ok": True}
 
 
 @app.delete("/api/brands/{brand_id}")
-def delete_brand(brand_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
+def delete_brand(
+    brand_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)
+):
     db.execute(text("DELETE FROM brands WHERE id=:i"), {"i": brand_id})
     db.commit()
     return {"ok": True}
@@ -266,7 +341,10 @@ async def upload_codes(
     db: Session = Depends(get_db),
     admin=Depends(current_admin),
 ):
-    brand = db.execute(text("SELECT id, slug FROM brands WHERE id=:i AND is_active=TRUE"), {"i": brand_id}).first()
+    brand = db.execute(
+        text("SELECT id, slug FROM brands WHERE id=:i AND is_active=TRUE"),
+        {"i": brand_id},
+    ).first()
     if not brand:
         raise HTTPException(400, "Brand not found or inactive")
 
@@ -275,6 +353,7 @@ async def upload_codes(
 
     # Stream upload to a temp file so we don't hold the whole xlsx in memory.
     import tempfile, shutil, os as _os
+
     tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     tmp_path = tmp.name
     batch_id = None
@@ -304,10 +383,12 @@ async def upload_codes(
         # Create batch row
         today = dt.datetime.utcnow().strftime("%Y%m%d")
         count_today = db.execute(
-            text("SELECT COUNT(*) FROM upload_batches WHERE brand_id=:b AND DATE(created_at)=CURRENT_DATE"),
+            text(
+                "SELECT COUNT(*) FROM upload_batches WHERE brand_id=:b AND DATE(created_at)=CURRENT_DATE"
+            ),
             {"b": brand_id},
         ).scalar()
-        batch_number = f"{brand[1].upper()}-{today}-{int(count_today)+1:04d}"
+        batch_number = f"{brand[1].upper()}-{today}-{int(count_today) + 1:04d}"
         batch_row = db.execute(
             text("""INSERT INTO upload_batches (brand_id, batch_number, file_name, codes_uploaded)
                     VALUES (:b,:n,:f,0) RETURNING id"""),
@@ -321,6 +402,7 @@ async def upload_codes(
         # (code already exists for this brand from a prior upload) are skipped
         # via ON CONFLICT, and counted separately.
         from psycopg2.extras import execute_values
+
         CHUNK = 5000
         SAMPLE_LIMIT = 15
         chunk: List[tuple] = []
@@ -385,7 +467,10 @@ async def upload_codes(
         finally:
             conn.close()
 
-        db.execute(text("UPDATE upload_batches SET codes_uploaded=:c WHERE id=:i"), {"c": inserted, "i": batch_id})
+        db.execute(
+            text("UPDATE upload_batches SET codes_uploaded=:c WHERE id=:i"),
+            {"c": inserted, "i": batch_id},
+        )
         db.commit()
         return {
             "batch_id": batch_id,
@@ -401,7 +486,9 @@ async def upload_codes(
     except HTTPException:
         if batch_id is not None:
             try:
-                db.execute(text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id})
+                db.execute(
+                    text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id}
+                )
                 db.commit()
             except Exception:
                 db.rollback()
@@ -409,7 +496,9 @@ async def upload_codes(
     except Exception as e:
         if batch_id is not None:
             try:
-                db.execute(text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id})
+                db.execute(
+                    text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id}
+                )
                 db.commit()
             except Exception:
                 db.rollback()
@@ -426,6 +515,7 @@ def codes_sample():
     """Return a tiny sample .xlsx with a Code column."""
     from openpyxl import Workbook
     from fastapi.responses import StreamingResponse
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Codes"
@@ -460,15 +550,24 @@ def list_batches(
         where.append("b.brand_id = :bid")
         params["bid"] = brand_id
     if search:
-        where.append("(b.batch_number ILIKE :q OR b.file_name ILIKE :q OR br.name ILIKE :q)")
+        where.append(
+            "(b.batch_number ILIKE :q OR b.file_name ILIKE :q OR br.name ILIKE :q)"
+        )
         params["q"] = f"%{search}%"
     w = " AND ".join(where)
-    total = db.execute(text(f"""
+    total = (
+        db.execute(
+            text(f"""
         SELECT COUNT(*) FROM upload_batches b JOIN brands br ON br.id=b.brand_id WHERE {w}
-    """), params).scalar() or 0
+    """),
+            params,
+        ).scalar()
+        or 0
+    )
     params["lim"] = limit
     params["off"] = offset
-    rows = db.execute(text(f"""
+    rows = db.execute(
+        text(f"""
         SELECT b.id, b.batch_number, b.file_name, b.codes_uploaded, b.created_at,
                br.id, br.name, br.slug
         FROM upload_batches b
@@ -476,34 +575,47 @@ def list_batches(
         WHERE {w}
         ORDER BY b.created_at DESC
         LIMIT :lim OFFSET :off
-    """), params).all()
+    """),
+        params,
+    ).all()
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
         "items": [
             {
-                "id": r[0], "batch_number": r[1], "file_name": r[2],
+                "id": r[0],
+                "batch_number": r[1],
+                "file_name": r[2],
                 "codes_uploaded": r[3],
                 "created_at": r[4].isoformat() if r[4] else None,
-                "brand_id": r[5], "brand_name": r[6], "brand_slug": r[7],
-            } for r in rows
+                "brand_id": r[5],
+                "brand_name": r[6],
+                "brand_slug": r[7],
+            }
+            for r in rows
         ],
     }
 
 
 @app.get("/api/batches/{batch_id}")
-def batch_detail(batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
-    row = db.execute(text("""
+def batch_detail(
+    batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)
+):
+    row = db.execute(
+        text("""
         SELECT b.id, b.batch_number, b.file_name, b.codes_uploaded, b.created_at,
                br.id, br.name, br.slug
         FROM upload_batches b JOIN brands br ON br.id=b.brand_id
         WHERE b.id=:i
-    """), {"i": batch_id}).first()
+    """),
+        {"i": batch_id},
+    ).first()
     if not row:
         raise HTTPException(404, "Batch not found")
     # Aggregate verification stats: count valid-scan logs against codes in this batch.
-    stats = db.execute(text("""
+    stats = db.execute(
+        text("""
         SELECT
             COUNT(v.id) FILTER (WHERE v.is_valid = TRUE) AS total_verifications,
             COUNT(DISTINCT v.code) FILTER (WHERE v.is_valid = TRUE) AS codes_verified,
@@ -512,12 +624,18 @@ def batch_detail(batch_id: int, db: Session = Depends(get_db), admin=Depends(cur
         LEFT JOIN verification_logs v
           ON v.code = pc.code AND v.brand_id = pc.brand_id
         WHERE pc.batch_id = :i
-    """), {"i": batch_id}).first()
+    """),
+        {"i": batch_id},
+    ).first()
     return {
-        "id": row[0], "batch_number": row[1], "file_name": row[2],
+        "id": row[0],
+        "batch_number": row[1],
+        "file_name": row[2],
         "codes_uploaded": row[3],
         "created_at": row[4].isoformat() if row[4] else None,
-        "brand_id": row[5], "brand_name": row[6], "brand_slug": row[7],
+        "brand_id": row[5],
+        "brand_name": row[6],
+        "brand_slug": row[7],
         "total_verifications": int(stats[0] or 0),
         "codes_verified": int(stats[1] or 0),
         "last_verified_at": stats[2].isoformat() if stats[2] else None,
@@ -536,7 +654,9 @@ def batch_codes(
 ):
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
-    exists = db.execute(text("SELECT 1 FROM upload_batches WHERE id=:i"), {"i": batch_id}).first()
+    exists = db.execute(
+        text("SELECT 1 FROM upload_batches WHERE id=:i"), {"i": batch_id}
+    ).first()
     if not exists:
         raise HTTPException(404, "Batch not found")
     where = ["pc.batch_id = :i"]
@@ -548,7 +668,9 @@ def batch_codes(
     if verified_only:
         having = "HAVING COUNT(v.id) FILTER (WHERE v.is_valid = TRUE) > 0"
     w = " AND ".join(where)
-    total = db.execute(text(f"""
+    total = (
+        db.execute(
+            text(f"""
         SELECT COUNT(*) FROM (
             SELECT pc.id
             FROM product_codes pc
@@ -557,10 +679,15 @@ def batch_codes(
             GROUP BY pc.id
             {having}
         ) t
-    """), params).scalar() or 0
+    """),
+            params,
+        ).scalar()
+        or 0
+    )
     params["lim"] = limit
     params["off"] = offset
-    rows = db.execute(text(f"""
+    rows = db.execute(
+        text(f"""
         SELECT pc.id, pc.code, pc.created_at,
                COUNT(v.id) FILTER (WHERE v.is_valid = TRUE) AS verification_count,
                MAX(v.created_at) FILTER (WHERE v.is_valid = TRUE) AS last_verified_at
@@ -571,18 +698,22 @@ def batch_codes(
         {having}
         ORDER BY verification_count DESC, pc.id ASC
         LIMIT :lim OFFSET :off
-    """), params).all()
+    """),
+        params,
+    ).all()
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
         "items": [
             {
-                "id": r[0], "code": r[1],
+                "id": r[0],
+                "code": r[1],
                 "created_at": r[2].isoformat() if r[2] else None,
                 "verification_count": int(r[3] or 0),
                 "last_verified_at": r[4].isoformat() if r[4] else None,
-            } for r in rows
+            }
+            for r in rows
         ],
     }
 
@@ -599,11 +730,14 @@ def code_logs(
 ):
     limit = min(max(limit, 1), 500)
     offset = max(offset, 0)
-    pc = db.execute(text("""
+    pc = db.execute(
+        text("""
         SELECT pc.id, pc.code, pc.brand_id, br.name, br.slug
         FROM product_codes pc LEFT JOIN brands br ON br.id = pc.brand_id
         WHERE pc.id = :i
-    """), {"i": code_id}).first()
+    """),
+        {"i": code_id},
+    ).first()
     if not pc:
         raise HTTPException(404, "Code not found")
     where = ["code = :c", "brand_id = :b"]
@@ -616,18 +750,24 @@ def code_logs(
     elif valid == "false":
         where.append("is_valid = FALSE")
     w = " AND ".join(where)
-    total = db.execute(
-        text(f"SELECT COUNT(*) FROM verification_logs WHERE {w}"), params
-    ).scalar() or 0
+    total = (
+        db.execute(
+            text(f"SELECT COUNT(*) FROM verification_logs WHERE {w}"), params
+        ).scalar()
+        or 0
+    )
     params["l"] = limit
     params["o"] = offset
-    rows = db.execute(text(f"""
+    rows = db.execute(
+        text(f"""
         SELECT id, is_valid, created_at, ip_address, user_agent
         FROM verification_logs
         WHERE {w}
         ORDER BY created_at DESC, id DESC
         LIMIT :l OFFSET :o
-    """), params).all()
+    """),
+        params,
+    ).all()
     return {
         "code": pc[1],
         "brand_name": pc[3],
@@ -637,16 +777,21 @@ def code_logs(
         "offset": offset,
         "items": [
             {
-                "id": r[0], "is_valid": r[1],
+                "id": r[0],
+                "is_valid": r[1],
                 "created_at": r[2].isoformat() if r[2] else None,
-                "ip": r[3], "user_agent": r[4],
-            } for r in rows
+                "ip": r[3],
+                "user_agent": r[4],
+            }
+            for r in rows
         ],
     }
 
 
 @app.delete("/api/batches/{batch_id}")
-def delete_batch(batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)):
+def delete_batch(
+    batch_id: int, db: Session = Depends(get_db), admin=Depends(current_admin)
+):
     db.execute(text("DELETE FROM upload_batches WHERE id=:i"), {"i": batch_id})
     db.commit()
     return {"ok": True}
@@ -666,24 +811,38 @@ def list_codes(
     where = ["1=1"]
     params = {}
     if brand_id:
-        where.append("pc.brand_id=:b"); params["b"] = brand_id
+        where.append("pc.brand_id=:b")
+        params["b"] = brand_id
     if batch_id:
-        where.append("pc.batch_id=:bt"); params["bt"] = batch_id
+        where.append("pc.batch_id=:bt")
+        params["bt"] = batch_id
     if search:
-        where.append("pc.code ILIKE :s"); params["s"] = f"%{search}%"
+        where.append("pc.code ILIKE :s")
+        params["s"] = f"%{search}%"
     w = " AND ".join(where)
-    total = db.execute(text(f"SELECT COUNT(*) FROM product_codes pc WHERE {w}"), params).scalar()
-    params["lim"] = limit; params["off"] = offset
-    rows = db.execute(text(f"""
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM product_codes pc WHERE {w}"), params
+    ).scalar()
+    params["lim"] = limit
+    params["off"] = offset
+    rows = db.execute(
+        text(f"""
         SELECT pc.id, pc.code, pc.created_at, br.name
         FROM product_codes pc JOIN brands br ON br.id=pc.brand_id
         WHERE {w}
         ORDER BY pc.id DESC LIMIT :lim OFFSET :off
-    """), params).all()
+    """),
+        params,
+    ).all()
     return {
         "total": int(total or 0),
         "items": [
-            {"id": r[0], "code": r[1], "created_at": r[2].isoformat() if r[2] else None, "brand_name": r[3]}
+            {
+                "id": r[0],
+                "code": r[1],
+                "created_at": r[2].isoformat() if r[2] else None,
+                "brand_name": r[3],
+            }
             for r in rows
         ],
     }
@@ -693,47 +852,74 @@ def list_codes(
 @app.get("/api/dashboard/stats")
 def dashboard_stats(db: Session = Depends(get_db), admin=Depends(current_admin)):
     total_codes = db.execute(text("SELECT COUNT(*) FROM product_codes")).scalar() or 0
-    total_verifs = db.execute(text("SELECT COUNT(*) FROM verification_logs")).scalar() or 0
-    total_batches = db.execute(text("SELECT COUNT(*) FROM upload_batches")).scalar() or 0
+    total_verifs = (
+        db.execute(text("SELECT COUNT(*) FROM verification_logs")).scalar() or 0
+    )
+    total_batches = (
+        db.execute(text("SELECT COUNT(*) FROM upload_batches")).scalar() or 0
+    )
     total_brands = db.execute(text("SELECT COUNT(*) FROM brands")).scalar() or 0
 
-    codes_per_brand = db.execute(text("""
+    codes_per_brand = db.execute(
+        text("""
         SELECT br.id, br.name, COUNT(pc.id)
         FROM brands br LEFT JOIN product_codes pc ON pc.brand_id=br.id
         GROUP BY br.id, br.name ORDER BY br.id
-    """)).all()
-    verifs_per_brand = db.execute(text("""
+    """)
+    ).all()
+    verifs_per_brand = db.execute(
+        text("""
         SELECT br.id, br.name, COUNT(v.id)
         FROM brands br LEFT JOIN verification_logs v ON v.brand_id=br.id
         GROUP BY br.id, br.name ORDER BY br.id
-    """)).all()
+    """)
+    ).all()
     return {
         "totals": {
-            "codes": int(total_codes), "verifications": int(total_verifs),
-            "batches": int(total_batches), "brands": int(total_brands),
+            "codes": int(total_codes),
+            "verifications": int(total_verifs),
+            "batches": int(total_batches),
+            "brands": int(total_brands),
         },
-        "codes_per_brand": [{"brand": r[1], "count": int(r[2])} for r in codes_per_brand],
-        "verifications_per_brand": [{"brand": r[1], "count": int(r[2])} for r in verifs_per_brand],
+        "codes_per_brand": [
+            {"brand": r[1], "count": int(r[2])} for r in codes_per_brand
+        ],
+        "verifications_per_brand": [
+            {"brand": r[1], "count": int(r[2])} for r in verifs_per_brand
+        ],
     }
 
 
 @app.get("/api/public/stats")
 def public_stats(db: Session = Depends(get_db)):
     codes = db.execute(text("SELECT COUNT(*) FROM product_codes")).scalar() or 0
-    verifs = db.execute(text("SELECT COUNT(*) FROM verification_logs WHERE is_valid=TRUE")).scalar() or 0
+    verifs = (
+        db.execute(
+            text("SELECT COUNT(*) FROM verification_logs WHERE is_valid=TRUE")
+        ).scalar()
+        or 0
+    )
     return {"codes": int(codes), "verifications": int(verifs), "uptime": "99.9%"}
 
 
 @app.get("/api/public/brands/{slug}")
 def public_brand(slug: str, db: Session = Depends(get_db)):
     r = db.execute(
-        text("SELECT id, name, slug, primary_color, desktop_image, mobile_image FROM brands WHERE slug=:s AND is_active=TRUE"),
+        text(
+            "SELECT id, name, slug, primary_color, desktop_image, mobile_image FROM brands WHERE slug=:s AND is_active=TRUE"
+        ),
         {"s": slug},
     ).first()
     if not r:
         raise HTTPException(404, "Brand not found")
-    return {"id": r[0], "name": r[1], "slug": r[2], "primary_color": r[3],
-            "desktop_image": r[4], "mobile_image": r[5]}
+    return {
+        "id": r[0],
+        "name": r[1],
+        "slug": r[2],
+        "primary_color": r[3],
+        "desktop_image": r[4],
+        "mobile_image": r[5],
+    }
 
 
 class VerifyIn(BaseModel):
@@ -807,12 +993,21 @@ def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db))
     )
     db.commit()
     if not prior:
-        return {"status": "first", "brand": brand[1], "code": code,
-                "verified_at": now.isoformat(), "history": []}
-    return {"status": "repeat", "brand": brand[1], "code": code,
-            "first_verified_at": prior[0][0].isoformat(),
-            "current_scan_at": now.isoformat(),
-            "history": [r[0].isoformat() for r in prior]}
+        return {
+            "status": "first",
+            "brand": brand[1],
+            "code": code,
+            "verified_at": now.isoformat(),
+            "history": [],
+        }
+    return {
+        "status": "repeat",
+        "brand": brand[1],
+        "code": code,
+        "first_verified_at": prior[0][0].isoformat(),
+        "current_scan_at": now.isoformat(),
+        "history": [r[0].isoformat() for r in prior],
+    }
 
 
 @app.get("/api/activity")
@@ -840,9 +1035,14 @@ def activity(
         params,
     ).all()
     return [
-        {"id": r[0], "code": r[1], "is_valid": r[2],
-         "created_at": r[3].isoformat() if r[3] else None,
-         "ip": r[4], "brand": r[5]}
+        {
+            "id": r[0],
+            "code": r[1],
+            "is_valid": r[2],
+            "created_at": r[3].isoformat() if r[3] else None,
+            "ip": r[4],
+            "brand": r[5],
+        }
         for r in rows
     ]
 
@@ -860,13 +1060,21 @@ def reset_data(
     """
     if confirm != "RESET-ALL-DATA":
         raise HTTPException(400, "Missing or invalid confirmation token")
-    db.execute(text(
-        "TRUNCATE TABLE verification_logs, product_codes, upload_batches, brands "
-        "RESTART IDENTITY CASCADE"
-    ))
+    db.execute(
+        text(
+            "TRUNCATE TABLE verification_logs, product_codes, upload_batches, brands "
+            "RESTART IDENTITY CASCADE"
+        )
+    )
     db.commit()
     counts = {}
-    for tbl in ("admins", "brands", "product_codes", "upload_batches", "verification_logs"):
+    for tbl in (
+        "admins",
+        "brands",
+        "product_codes",
+        "upload_batches",
+        "verification_logs",
+    ):
         counts[tbl] = db.execute(text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
     return {"ok": True, "wiped_by": admin["email"], "row_counts": counts}
 
@@ -905,6 +1113,7 @@ if _FRONTEND_DIST.is_dir():
         # Otherwise fall back to the SPA shell so React Router can handle it.
         return FileResponse(_INDEX_HTML)
 else:
+
     @app.get("/")
     def _root_dev():
         return {
