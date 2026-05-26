@@ -20,8 +20,18 @@ export default function Topbar() {
 
   return (
     <div className="topbar">
-      <Link to="/" className="brand-logo">
-        <span className="pro">PRO</span><span className="verify">verify</span>
+      <Link to="/" className="brand-logo" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+        <span style={{
+          width: 30, height: 30, borderRadius: 7, background: "#1b5e20",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 2px 6px rgba(27,94,32,0.25)", flexShrink: 0,
+        }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#86efac" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+        </span>
+        <span><span className="pro">PRO</span><span className="verify">verify</span></span>
       </Link>
       <div className="row" style={{ gap: 8, fontSize: 14 }}>
         <NavLink to="/" label="Dashboard" active={loc.pathname === "/"} />
