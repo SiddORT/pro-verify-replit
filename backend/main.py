@@ -412,22 +412,52 @@ def codes_sample():
 
 # ---------- Batches & Codes listing ----------
 @app.get("/api/batches")
-def list_batches(db: Session = Depends(get_db), admin=Depends(current_admin)):
-    rows = db.execute(text("""
+def list_batches(
+    search: Optional[str] = None,
+    brand_id: Optional[int] = None,
+    limit: int = 25,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    where = ["1=1"]
+    params: dict = {}
+    if brand_id:
+        where.append("b.brand_id = :bid")
+        params["bid"] = brand_id
+    if search:
+        where.append("(b.batch_number ILIKE :q OR b.file_name ILIKE :q OR br.name ILIKE :q)")
+        params["q"] = f"%{search}%"
+    w = " AND ".join(where)
+    total = db.execute(text(f"""
+        SELECT COUNT(*) FROM upload_batches b JOIN brands br ON br.id=b.brand_id WHERE {w}
+    """), params).scalar() or 0
+    params["lim"] = limit
+    params["off"] = offset
+    rows = db.execute(text(f"""
         SELECT b.id, b.batch_number, b.file_name, b.codes_uploaded, b.created_at,
-               br.id, br.name
+               br.id, br.name, br.slug
         FROM upload_batches b
         JOIN brands br ON br.id=b.brand_id
+        WHERE {w}
         ORDER BY b.created_at DESC
-    """)).all()
-    return [
-        {
-            "id": r[0], "batch_number": r[1], "file_name": r[2],
-            "codes_uploaded": r[3],
-            "created_at": r[4].isoformat() if r[4] else None,
-            "brand_id": r[5], "brand_name": r[6],
-        } for r in rows
-    ]
+        LIMIT :lim OFFSET :off
+    """), params).all()
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [
+            {
+                "id": r[0], "batch_number": r[1], "file_name": r[2],
+                "codes_uploaded": r[3],
+                "created_at": r[4].isoformat() if r[4] else None,
+                "brand_id": r[5], "brand_name": r[6], "brand_slug": r[7],
+            } for r in rows
+        ],
+    }
 
 
 @app.delete("/api/batches/{batch_id}")

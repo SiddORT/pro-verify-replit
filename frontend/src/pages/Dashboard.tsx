@@ -15,8 +15,9 @@ export default function Dashboard() {
   const [q, setQ] = useState("");
 
   async function load() {
-    const [s, b] = await Promise.all([api.get("/api/dashboard/stats"), api.get("/api/batches")]);
-    setStats(s.data); setBatches(b.data);
+    const [s, b] = await Promise.all([api.get("/api/dashboard/stats"), api.get("/api/batches", { params: { limit: 200 } })]);
+    setStats(s.data);
+    setBatches(Array.isArray(b.data) ? b.data : (b.data?.items || []));
   }
   useEffect(() => { load(); }, []);
 
