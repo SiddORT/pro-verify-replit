@@ -16,7 +16,21 @@ import bcrypt
 from jose import jwt, JWTError
 from openpyxl import load_workbook
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+# Load variables from a local .env file when present. On Replit, the platform
+# already injects Secrets into the process environment, so this is a no-op
+# there; the call exists so the same code runs cleanly outside Replit too.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ModuleNotFoundError:
+    # python-dotenv is optional — environment variables can still be supplied
+    # directly by the host (Replit Secrets, systemd, docker --env-file, etc.).
+    pass
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 SECRET_KEY = os.environ.get("SESSION_SECRET")
 if not SECRET_KEY:
     raise RuntimeError("SESSION_SECRET environment variable is required")
@@ -83,20 +97,28 @@ def get_db():
 
 
 def seed_admin():
-    """Idempotently ensure the default admin exists.
+    """Idempotently ensure the bootstrap admin exists.
 
-    This is the only seed run on startup. All other tables (brands,
-    product_codes, upload_batches, verification_logs) are intentionally
-    left empty so each environment starts clean and is populated only
-    through the admin UI (Brands page + Upload xlsx flow).
+    Credentials are taken from `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD`
+    so production deployments can set their own and never rely on a default.
+    If both are unset, seeding is skipped — in that case the admins table must
+    be populated out-of-band before anyone can log in.
+
+    All other tables (brands, product_codes, upload_batches, verification_logs)
+    are intentionally left empty so each environment starts clean and is
+    populated only through the admin UI.
     """
+    email = os.environ.get("INITIAL_ADMIN_EMAIL")
+    password = os.environ.get("INITIAL_ADMIN_PASSWORD")
+    if not email or not password:
+        return
     db = SessionLocal()
     try:
-        row = db.execute(text("SELECT id FROM admins WHERE email=:e"), {"e": "admin@proverify.com"}).first()
+        row = db.execute(text("SELECT id FROM admins WHERE email=:e"), {"e": email}).first()
         if not row:
             db.execute(
                 text("INSERT INTO admins (email, password_hash) VALUES (:e,:p)"),
-                {"e": "admin@proverify.com", "p": hash_password("admin123")},
+                {"e": email, "p": hash_password(password)},
             )
             db.commit()
     finally:

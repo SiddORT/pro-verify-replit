@@ -1,9 +1,39 @@
+# Dependencies
 node_modules/
+frontend/node_modules/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+venv/
 .venv/
 .pythonlibs/
+
+# Build output
 dist/
-.env
-frontend/node_modules/
+build/
 frontend/dist/
+frontend/build/
+
+# Environment / secrets — never commit real values.
+# Ignore every variant (.env, .env.local, .env.production, .env.development, ...)
+# but keep the checked-in example templates so new contributors can copy them.
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+!.env.example
+!frontend/.env.example
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pip-log.txt
