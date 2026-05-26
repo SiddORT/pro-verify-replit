@@ -19,35 +19,23 @@ from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 import bcrypt
 from jose import jwt, JWTError
 from openpyxl import load_workbook
 
-# Load variables from a local .env file when present. On Replit, the platform
-# already injects Secrets into the process environment, so this is a no-op
-# there; the call exists so the same code runs cleanly outside Replit too.
-try:
-    from dotenv import load_dotenv
+# Engine, SessionLocal, and Base live in backend.database so they can be
+# shared with Alembic (see alembic/env.py). Importing here triggers `.env`
+# loading and DATABASE_URL validation as a side effect.
+from backend.database import engine, SessionLocal, get_db  # noqa: F401
+from backend import models  # noqa: F401  # registers ORM models on Base.metadata
 
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-except ModuleNotFoundError:
-    # python-dotenv is optional — environment variables can still be supplied
-    # directly by the host (Replit Secrets, systemd, docker --env-file, etc.).
-    pass
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is required")
 SECRET_KEY = os.environ.get("SESSION_SECRET")
 if not SECRET_KEY:
     raise RuntimeError("SESSION_SECRET environment variable is required")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7
-
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
@@ -65,37 +53,8 @@ def verify_password(p: str, h: str) -> bool:
 app = FastAPI(title="PROverify API")
 
 
-@app.on_event("startup")
-def _ensure_schema_constraints() -> None:
-    """Ensure product_codes has a UNIQUE (brand_id, code) constraint.
-
-    The upload endpoint relies on `INSERT ... ON CONFLICT (brand_id, code)`
-    to skip duplicates. This makes that requirement self-healing on any
-    fresh environment without requiring an out-of-band migration.
-    """
-    from sqlalchemy import text as _text
-
-    with engine.begin() as conn:
-        exists = conn.execute(
-            _text(
-                "SELECT 1 FROM pg_constraint WHERE conname = 'product_codes_brand_code_unique'"
-            )
-        ).first()
-        if exists:
-            return
-        # Dedupe any pre-existing rows so the constraint can be added cleanly.
-        conn.execute(
-            _text(
-                "DELETE FROM product_codes a USING product_codes b "
-                "WHERE a.ctid < b.ctid AND a.brand_id = b.brand_id AND a.code = b.code"
-            )
-        )
-        conn.execute(
-            _text(
-                "ALTER TABLE product_codes "
-                "ADD CONSTRAINT product_codes_brand_code_unique UNIQUE (brand_id, code)"
-            )
-        )
+# Schema is now managed by Alembic — run `alembic upgrade head` to apply
+# pending migrations. See alembic/README.md for details.
 
 
 app.add_middleware(
@@ -110,12 +69,7 @@ app.add_middleware(
 )
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# NOTE: `get_db` is imported from backend.database at the top of this file.
 
 
 def seed_admin():
