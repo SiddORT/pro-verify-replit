@@ -35,7 +35,7 @@ export default function Upload() {
   const fRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.get("/api/brands?active_only=true").then((r) => setBrands(r.data));
+    api.get("/api/brands?active_only=true").then((r) => setBrands(Array.isArray(r.data) ? r.data : (r.data?.items || []))).catch(() => {});
   }, []);
 
   async function submit(e: React.FormEvent) {

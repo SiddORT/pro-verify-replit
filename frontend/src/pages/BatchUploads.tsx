@@ -34,7 +34,7 @@ export default function BatchUploads() {
   const [confirmDel, setConfirmDel] = useState<Batch | null>(null);
 
   useEffect(() => {
-    api.get("/api/brands").then((r) => setBrands(r.data)).catch(() => {});
+    api.get("/api/brands").then((r) => setBrands(Array.isArray(r.data) ? r.data : (r.data?.items || []))).catch(() => {});
   }, []);
 
   useEffect(() => {

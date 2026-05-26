@@ -14,7 +14,7 @@ export default function Activity() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { api.get("/api/brands").then((r) => setBrands(r.data)); }, []);
+  useEffect(() => { api.get("/api/brands").then((r) => setBrands(Array.isArray(r.data) ? r.data : (r.data?.items || []))).catch(() => {}); }, []);
 
   async function load() {
     setLoading(true);

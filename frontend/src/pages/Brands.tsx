@@ -37,7 +37,7 @@ export default function Brands() {
 
   async function load() {
     const r = await api.get("/api/brands");
-    setBrands(r.data);
+    setBrands(Array.isArray(r.data) ? r.data : (r.data?.items || []));
   }
   useEffect(() => { load(); }, []);
 
