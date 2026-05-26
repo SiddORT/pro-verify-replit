@@ -45,10 +45,10 @@ export default function Dashboard() {
         </div>
 
         <div className="stat-grid">
-          <Card v={stats?.totals.codes ?? "—"} l="Total Codes Uploaded" />
-          <Card v={stats?.totals.verifications ?? "—"} l="Total Verifications" />
-          <Card v={stats?.totals.batches ?? "—"} l="Upload Batches" />
-          <Card v={stats?.totals.brands ?? "—"} l="Brands" />
+          <Card v={stats?.totals?.codes ?? "—"} l="Total Codes Uploaded" />
+          <Card v={stats?.totals?.verifications ?? "—"} l="Total Verifications" />
+          <Card v={stats?.totals?.batches ?? "—"} l="Upload Batches" />
+          <Card v={stats?.totals?.brands ?? "—"} l="Brands" />
         </div>
 
         <div className="chart-grid">
