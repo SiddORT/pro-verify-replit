@@ -86,70 +86,242 @@ export default function Upload() {
     if (fRef.current) fRef.current.value = "";
   }
 
+  const selectedBrand = brands.find((b) => String(b.id) === brandId);
+  const step = report ? 3 : file && brandId ? 2 : brandId ? 1 : 0;
+
   return (
     <>
       <Topbar />
-      <div className="page" style={{ maxWidth: 880 }}>
+      <div className="page" style={{ maxWidth: 1080 }}>
         <Link to="/" className="back-link">← Back to Dashboard</Link>
-        <h1 className="page-title">Upload New Codes</h1>
-        <p className="page-sub">Upload an Excel file with codes mapped to a brand</p>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 14 }}>
+          <div>
+            <h1 className="page-title" style={{ marginBottom: 4 }}>Upload New Codes</h1>
+            <p className="page-sub" style={{ margin: 0 }}>Upload an Excel file with codes mapped to a brand</p>
+          </div>
+          <Stepper step={step} />
+        </div>
 
         {report ? (
           <ReportCard report={report} onUploadAnother={resetForNext} />
         ) : (
-          <form onSubmit={submit} className="card">
-            <h3 style={{ margin: "0 0 18px", fontSize: 16 }}>Code Upload</h3>
-            <div style={{ marginBottom: 18 }}>
-              <label className="label">Select Brand</label>
-              <select className="select" value={brandId} onChange={(e) => setBrandId(e.target.value)} required>
-                <option value="">{brands.length ? "Choose a brand..." : "Loading brands..."}</option>
-                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              <div style={{ color: "#6b7280", fontSize: 12, marginTop: 6 }}>
-                Only active brands from the Brand Master are shown here.
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 20, alignItems: "start" }}>
+            <form onSubmit={submit} className="card" style={{ padding: 0, overflow: "hidden" }}>
+              {/* Section 1: Brand */}
+              <Section n={1} title="Select Brand" sub="Pick the brand these codes belong to" done={!!brandId}>
+                <select
+                  className="select"
+                  value={brandId}
+                  onChange={(e) => setBrandId(e.target.value)}
+                  required
+                  style={{ maxWidth: 420 }}
+                >
+                  <option value="">{brands.length ? "Choose a brand..." : "Loading brands..."}</option>
+                  {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                {selectedBrand && (
+                  <div style={{
+                    marginTop: 14, padding: 12, background: "#f9fafb", border: "1px solid #e5e7eb",
+                    borderRadius: 8, display: "flex", alignItems: "center", gap: 12,
+                  }}>
+                    {selectedBrand.desktop_image
+                      ? <img src={selectedBrand.desktop_image} className="brand-thumb" alt="" />
+                      : <div className="brand-thumb" style={{ background: selectedBrand.primary_color }} />}
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{selectedBrand.name}</div>
+                      <div style={{ fontSize: 12, color: "#6b7280", fontFamily: "ui-monospace, Menlo, monospace" }}>
+                        /verify/{selectedBrand.slug}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }} />
+                    <span className="badge-active">Active</span>
+                  </div>
+                )}
+                {!brands.length && (
+                  <div style={{ marginTop: 10, fontSize: 13, color: "#6b7280" }}>
+                    No active brands found. <Link to="/brands" style={{ color: "#1b5e20", fontWeight: 600 }}>Create one →</Link>
+                  </div>
+                )}
+              </Section>
+
+              {/* Section 2: File */}
+              <Section n={2} title="Upload Excel File" sub="Drop your .xlsx file or browse to select" done={!!file}>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+                  <button type="button" className="btn-outline" onClick={downloadSample}>
+                    <span style={{ marginRight: 6 }}>↓</span> Download Sample
+                  </button>
+                </div>
+                {file ? (
+                  <div style={{
+                    border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 10,
+                    padding: 16, display: "flex", alignItems: "center", gap: 14,
+                  }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 8, background: "#1b5e20", color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+                    }}>XLSX</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {file.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#166534", marginTop: 2 }}>
+                        {(file.size / 1024).toFixed(1)} KB • Ready to upload
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => { setFile(null); if (fRef.current) fRef.current.value = ""; }}
+                      style={{ color: "#dc2626" }}
+                    >
+                      Remove
+                    </button>
+                    <button type="button" className="btn-outline" onClick={() => fRef.current?.click()}>Replace</button>
+                  </div>
+                ) : (
+                  <div
+                    className={`dropzone ${drag ? "drag" : ""}`}
+                    onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+                    onDragLeave={() => setDrag(false)}
+                    onDrop={onDrop}
+                    onClick={() => fRef.current?.click()}
+                    style={{ padding: "44px 24px" }}
+                  >
+                    <div style={{
+                      width: 56, height: 56, borderRadius: "50%", background: "#e8f3ea",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 10,
+                    }}>
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1b5e20" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#111" }}>
+                      Drop your Excel file here, or <span style={{ color: "#1b5e20", textDecoration: "underline" }}>browse</span>
+                    </div>
+                    <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 6 }}>
+                      .xlsx files only • Must contain a "Code" column
+                    </div>
+                  </div>
+                )}
+                <input ref={fRef} type="file" accept=".xlsx" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
+              </Section>
+
+              {/* Footer / Submit */}
+              <div style={{
+                padding: "18px 24px", borderTop: "1px solid #e5e7eb", background: "#fafafa",
+                display: "flex", alignItems: "center", gap: 14, justifyContent: "space-between",
+              }}>
+                {err ? (
+                  <div style={{ color: "#dc2626", fontSize: 13, fontWeight: 500 }}>⚠ {err}</div>
+                ) : (
+                  <div style={{ color: "#6b7280", fontSize: 13 }}>
+                    {brandId && file
+                      ? <>Ready to upload <b>{file.name}</b> to <b>{selectedBrand?.name}</b></>
+                      : "Complete both steps to enable upload"}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Link to="/" className="btn-outline">Cancel</Link>
+                  <button
+                    className="btn"
+                    type="submit"
+                    disabled={uploading || !brandId || !file}
+                    style={{ opacity: !brandId || !file ? 0.55 : 1, cursor: !brandId || !file ? "not-allowed" : "pointer" }}
+                  >
+                    {uploading ? "Uploading..." : "Upload Codes →"}
+                  </button>
+                </div>
               </div>
-            </div>
+            </form>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <label className="label" style={{ margin: 0 }}>Upload Excel File (.xlsx)</label>
-              <button type="button" className="btn-outline" onClick={downloadSample}>↓ Download Sample</button>
-            </div>
-
-            <div
-              className={`dropzone ${drag ? "drag" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-              onDragLeave={() => setDrag(false)}
-              onDrop={onDrop}
-              onClick={() => fRef.current?.click()}
-            >
-              <div className="dropzone-icon">⬆</div>
-              {file ? (
-                <div style={{ marginTop: 10, fontWeight: 600 }}>{file.name} <span style={{ color: "#6b7280", fontWeight: 400 }}>({(file.size / 1024).toFixed(1)} KB)</span></div>
-              ) : (
-                <>
-                  <div style={{ marginTop: 10 }}>Drag & drop your Excel file here, or click to browse</div>
-                  <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>Accepts .xlsx files. Must have a "Code" column.</div>
-                </>
-              )}
-              <input ref={fRef} type="file" accept=".xlsx" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </div>
-
-            {err && (
-              <div style={{ marginTop: 14, padding: 10, borderRadius: 6,
-                background: "#fee2e2", color: "#991b1b", fontSize: 14 }}>
-                {err}
+            {/* Sidebar: tips */}
+            <aside style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20 }}>
+              <div className="card" style={{ padding: 18 }}>
+                <h4 style={{ margin: "0 0 12px", fontSize: 14 }}>File Requirements</h4>
+                <Tip ok text='Excel format (.xlsx)' />
+                <Tip ok text='Header row with a "Code" column' />
+                <Tip ok text="One code per row, in the Code column" />
+                <Tip ok text="Supports lakhs of codes per file" />
+                <button type="button" className="btn-outline" onClick={downloadSample} style={{ width: "100%", marginTop: 12 }}>
+                  ↓ Download Sample File
+                </button>
               </div>
-            )}
-
-            <div style={{ marginTop: 18 }}>
-              <button className="btn" type="submit" disabled={uploading}>
-                {uploading ? "Uploading..." : "Upload Codes"}
-              </button>
-            </div>
-          </form>
+              <div className="card" style={{ padding: 18, background: "linear-gradient(135deg, #e8f3ea 0%, #f0fdf4 100%)", border: "1px solid #bbf7d0" }}>
+                <h4 style={{ margin: "0 0 8px", fontSize: 14, color: "#1b5e20" }}>What happens next?</h4>
+                <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#166534", lineHeight: 1.7 }}>
+                  <li>Codes are validated and stored</li>
+                  <li>A batch number is auto-generated</li>
+                  <li>Codes become active for verification</li>
+                  <li>You'll see a full upload report</li>
+                </ol>
+              </div>
+            </aside>
+          </div>
         )}
       </div>
     </>
+  );
+}
+
+function Stepper({ step }: { step: number }) {
+  const steps = ["Select Brand", "Choose File", "Upload"];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {steps.map((s, i) => {
+        const done = i < step;
+        const active = i === step;
+        const bg = done ? "#1b5e20" : active ? "#fff" : "#f3f4f6";
+        const color = done ? "#fff" : active ? "#1b5e20" : "#9ca3af";
+        const border = done ? "#1b5e20" : active ? "#1b5e20" : "#e5e7eb";
+        return (
+          <div key={s} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: "50%", background: bg, color, border: `1.5px solid ${border}`,
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700,
+            }}>
+              {done ? "✓" : i + 1}
+            </div>
+            <span style={{ fontSize: 12, color: active ? "#111" : "#6b7280", fontWeight: active ? 700 : 500 }}>{s}</span>
+            {i < steps.length - 1 && <div style={{ width: 24, height: 2, background: done ? "#1b5e20" : "#e5e7eb" }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Section({ n, title, sub, done, children }: { n: number; title: string; sub: string; done: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: 24, borderBottom: "1px solid #f1f2f4" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 14 }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: "50%",
+          background: done ? "#1b5e20" : "#f3f4f6", color: done ? "#fff" : "#6b7280",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0,
+        }}>
+          {done ? "✓" : n}
+        </div>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#111" }}>{title}</h3>
+          <div style={{ color: "#6b7280", fontSize: 12, marginTop: 2 }}>{sub}</div>
+        </div>
+      </div>
+      <div style={{ paddingLeft: 44 }}>{children}</div>
+    </div>
+  );
+}
+
+function Tip({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 13, color: "#374151" }}>
+      <span style={{
+        width: 18, height: 18, borderRadius: "50%", background: ok ? "#1b5e20" : "#e5e7eb", color: "#fff",
+        display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, flexShrink: 0,
+      }}>✓</span>
+      <span>{text}</span>
+    </div>
   );
 }
 
