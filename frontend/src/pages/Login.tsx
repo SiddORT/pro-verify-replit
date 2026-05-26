@@ -31,8 +31,8 @@ export default function Login() {
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "100vh" }}>
-      <div style={{
+    <div className="login-grid" style={{ minHeight: "100vh" }}>
+      <div className="login-hero" style={{
         background: "linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%)",
         color: "#fff", padding: "80px 60px", display: "flex", flexDirection: "column", justifyContent: "center"
       }}>
@@ -46,14 +46,14 @@ export default function Login() {
           The trusted product authentication platform for protein supplement manufacturers.
           Verify authenticity, track scans, and fight counterfeiting -- all from one dashboard.
         </p>
-        <div style={{ display: "flex", gap: 60, marginTop: 36 }}>
+        <div style={{ display: "flex", gap: 40, marginTop: 36, flexWrap: "wrap" }}>
           <Stat n={stats ? stats.codes.toLocaleString() : "—"} l="Codes Protected" />
           <Stat n={stats ? stats.verifications.toLocaleString() : "—"} l="Scans Completed" />
           <Stat n={stats ? stats.uptime : "—"} l="Uptime" />
         </div>
       </div>
-      <div style={{ background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-        <form onSubmit={submit} style={{ width: 380 }}>
+      <div style={{ background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <form onSubmit={submit} style={{ width: "100%", maxWidth: 380 }}>
           <div style={{ textAlign: "center", marginBottom: 28 }}>
             <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em" }}>
               <span style={{ color: "#1b5e20" }}>PRO</span><span style={{ color: "#4caf50" }}>verify</span>

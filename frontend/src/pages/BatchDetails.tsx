@@ -119,7 +119,7 @@ export default function BatchDetails() {
             </div>
 
             {/* Stat tiles */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 18 }}>
+            <div className="stat-grid" style={{ marginBottom: 18 }}>
               <StatTile label="Codes Uploaded" value={batch.codes_uploaded.toLocaleString()} accent="#1b5e20" />
               <StatTile label="Codes Verified" value={batch.codes_verified.toLocaleString()}
                         sub={pct(batch.codes_verified, batch.codes_uploaded)} accent="#1b5e20" />

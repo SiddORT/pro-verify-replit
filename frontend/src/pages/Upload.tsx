@@ -121,7 +121,7 @@ export default function Upload() {
         {report ? (
           <ReportCard report={report} onUploadAnother={resetForNext} />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 20, alignItems: "start" }}>
+          <div className="upload-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 20, alignItems: "start" }}>
             <form onSubmit={submit} className="card" style={{ padding: 0, overflow: "hidden" }}>
               {/* Section 1: Brand */}
               <Section n={1} title="Select Brand" sub="Pick the brand these codes belong to" done={!!brandId}>
@@ -458,7 +458,7 @@ function DuplicatesCard({ report }: { report: Report }) {
           </div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+      <div className="dup-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
         <DupColumn
           title="Duplicates within this file"
           desc="Same code appeared more than once in the uploaded Excel."
@@ -522,7 +522,7 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
 
 function Row({ k, v, mono, last }: { k: string; v: any; mono?: boolean; last?: boolean }) {
   return (
-    <div style={{
+    <div className="kv-row" style={{
       display: "grid", gridTemplateColumns: "180px 1fr", padding: "12px 16px",
       borderBottom: last ? 0 : "1px solid #f1f2f4", fontSize: 14, alignItems: "center",
     }}>

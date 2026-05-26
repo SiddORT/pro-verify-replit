@@ -4,10 +4,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: #f5f6f7;
   color: #1f2937;
+  -webkit-text-size-adjust: 100%;
 }
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; cursor: pointer; }
-input, select { font-family: inherit; }
+input, select, textarea { font-family: inherit; font-size: 16px; } /* 16px prevents iOS zoom-on-focus */
+img { max-width: 100%; height: auto; }
 
 :root {
   --green: #1b5e20;
@@ -45,10 +47,20 @@ input, select { font-family: inherit; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 32px; background: #fff; border-bottom: 1px solid var(--border);
+  gap: 12px;
 }
 .brand-logo { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .brand-logo .pro { color: #333; }
 .brand-logo .verify { color: var(--green); }
+
+.topbar-nav { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.topbar-burger {
+  display: none;
+  background: transparent; border: 1px solid var(--border); border-radius: 8px;
+  width: 40px; height: 40px; padding: 0; align-items: center; justify-content: center;
+  color: #374151;
+}
+.topbar-mobile-panel { display: none; }
 
 .page { padding: 32px; max-width: 1200px; margin: 0 auto; }
 .page-title { font-size: 28px; font-weight: 700; margin: 0 0 4px; }
@@ -66,18 +78,19 @@ input, select { font-family: inherit; }
 .chart-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
 .chart-title { font-size: 11px; font-weight: 700; color: #374151; letter-spacing: 0.06em; margin: 0 0 12px; text-transform: uppercase; }
 
+.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; padding: 12px 14px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.05em; }
+.table th { text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; padding: 12px 14px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
 .table td { padding: 14px; border-bottom: 1px solid #f1f2f4; font-size: 14px; }
 .table tr:last-child td { border-bottom: 0; }
-.code-pill { background: var(--green-light); color: var(--green); padding: 4px 10px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; }
-.badge-active { background: var(--green-light); color: var(--green); padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-.badge-inactive { background: #f3f4f6; color: #6b7280; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.code-pill { background: var(--green-light); color: var(--green); padding: 4px 10px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.badge-active { background: var(--green-light); color: var(--green); padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.badge-inactive { background: #f3f4f6; color: #6b7280; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 
-.search { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; flex: 1; }
-.search input { border: 0; outline: 0; flex: 1; font-size: 14px; background: transparent; }
+.search { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; flex: 1; min-width: 0; }
+.search input { border: 0; outline: 0; flex: 1; min-width: 0; font-size: 14px; background: transparent; }
 
-.toolbar { display: flex; gap: 12px; margin-bottom: 16px; }
+.toolbar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 
 .dropzone {
   border: 2px dashed #d1d5db; border-radius: 10px; padding: 48px 24px;
@@ -94,3 +107,81 @@ input, select { font-family: inherit; }
   background: #f3f4f6; border: 1px solid var(--border);
 }
 .color-swatch { width: 38px; height: 38px; border-radius: 6px; border: 1px solid var(--border); }
+
+/* ====== Responsive helpers ====== */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.page-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+
+/* Login page */
+.login-grid { display: grid; grid-template-columns: 1fr 1fr; }
+
+/* Upload page */
+.upload-grid { /* desktop default already set inline */ }
+
+/* ====== Tablet (≤1024px) ====== */
+@media (max-width: 1024px) {
+  .page { padding: 24px 20px; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .chart-grid { grid-template-columns: 1fr; }
+  .upload-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ====== Mobile (≤640px) ====== */
+@media (max-width: 640px) {
+  .topbar { padding: 12px 16px; }
+  .brand-logo { font-size: 18px; }
+  .topbar-burger { display: inline-flex; }
+  .topbar-nav.is-desktop { display: none; }
+  .topbar-mobile-panel {
+    display: block;
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: #fff; border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+    padding: 10px; z-index: 100;
+  }
+  .topbar { position: relative; }
+
+  .page { padding: 16px 14px; }
+  .page-title { font-size: 22px; }
+  .page-sub { font-size: 13px; margin-bottom: 16px; }
+
+  .card { padding: 16px; border-radius: 8px; }
+  .stat { padding: 16px; }
+  .stat-value { font-size: 26px; }
+
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .row { flex-wrap: wrap; gap: 10px; }
+
+  /* Grids made with utility class collapse to single column */
+  .grid-2 { grid-template-columns: 1fr; }
+
+  /* Tables: ensure horizontal scroll even when not wrapped */
+  .table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .table thead, .table tbody, .table tr { display: table; width: 100%; table-layout: auto; }
+  .table th, .table td { padding: 10px 10px; font-size: 13px; }
+
+  .btn { padding: 10px 14px; font-size: 13px; }
+  .btn-outline { padding: 8px 12px; }
+
+  /* iOS Safari zooms in on focus for inputs <16px — force 16px on mobile */
+  .input, .select, .search input, textarea { font-size: 16px; }
+
+  /* Login stacks: hero on top (compact), form below */
+  .login-grid { grid-template-columns: 1fr; }
+  .login-hero { padding: 32px 24px !important; }
+  .login-hero h1 { font-size: 26px !important; }
+
+  /* Duplicate columns stack */
+  .dup-grid { grid-template-columns: 1fr !important; }
+  .dup-grid > div { border-left: 0 !important; border-top: 1px solid #fde68a; }
+
+  /* Key/value rows */
+  .kv-row { grid-template-columns: 1fr !important; gap: 2px; }
+}
+
+/* ====== Very small phones (≤380px) ====== */
+@media (max-width: 380px) {
+  .stat-grid { grid-template-columns: 1fr; }
+  .page { padding: 14px 12px; }
+}

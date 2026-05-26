@@ -64,8 +64,9 @@ export default function Activity() {
           </div>
         </div>
 
-        <div className="card">
-          <table className="table">
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="table-wrap">
+          <table className="table" style={{ minWidth: 720 }}>
             <thead>
               <tr>
                 <th>#</th><th>DATE / TIME</th><th>BRAND</th><th>CODE</th>
@@ -94,6 +95,7 @@ export default function Activity() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </>

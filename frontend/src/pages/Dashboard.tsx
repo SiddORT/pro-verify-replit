@@ -36,7 +36,7 @@ export default function Dashboard() {
     <>
       <Topbar />
       <div className="page">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div className="page-header-row">
           <div>
             <h1 className="page-title">Admin Dashboard</h1>
             <p className="page-sub">Manage product codes and view authentication activity</p>
@@ -103,7 +103,8 @@ export default function Dashboard() {
               <input placeholder="Search batch number or file name..." value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
           </div>
-          <table className="table">
+          <div className="table-wrap">
+          <table className="table" style={{ minWidth: 820 }}>
             <thead>
               <tr>
                 <th>SR NO</th><th>DATE & TIME</th><th>BATCH NUMBER</th>
@@ -127,6 +128,7 @@ export default function Dashboard() {
               )}
             </tbody>
           </table>
+          </div>
           {filtered.length > 5 && (
             <div style={{
               padding: "14px 4px 0", display: "flex", alignItems: "center",

@@ -107,7 +107,7 @@ export default function Brands() {
 
         <form onSubmit={save} className="card" style={{ marginBottom: 24 }}>
           <h3 style={{ margin: "0 0 18px", fontSize: 16 }}>{editingId ? "Edit Brand" : "Add New Brand"}</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div className="grid-2" style={{ marginBottom: 16 }}>
             <div>
               <label className="label">Brand Name<Req /></label>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter brand name" required />
@@ -126,7 +126,7 @@ export default function Brands() {
             </div>
           </div>
           <label className="label">Background Images <span style={{ color: "#9ca3af", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div className="grid-2" style={{ marginBottom: 16 }}>
             <ImagePicker title="Desktop / Web" sub="Recommended: 1920 x 1080px (16:9)"
               value={desktop} onChange={setDesktop} inputRef={dRef} />
             <ImagePicker title="Mobile" sub="Recommended: 750 x 1334px (9:16)"
@@ -149,7 +149,8 @@ export default function Brands() {
               <input placeholder="Search brands..." value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
           </div>
-          <table className="table">
+          <div className="table-wrap">
+          <table className="table" style={{ minWidth: 720 }}>
             <thead>
               <tr>
                 <th>#</th><th>IMAGE</th><th>BRAND NAME</th><th>STATUS</th>
@@ -204,6 +205,7 @@ export default function Brands() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 

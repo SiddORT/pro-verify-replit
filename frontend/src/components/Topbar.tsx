@@ -6,10 +6,11 @@ export default function Topbar() {
   const email = getEmail();
   const loc = useLocation();
   const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const onUploads = loc.pathname.startsWith("/upload") || loc.pathname.startsWith("/batches");
 
-  useEffect(() => { setOpen(false); }, [loc.pathname]);
+  useEffect(() => { setOpen(false); setMobileOpen(false); }, [loc.pathname]);
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -33,7 +34,9 @@ export default function Topbar() {
         </span>
         <span><span className="pro">PRO</span><span className="verify">verify</span></span>
       </Link>
-      <div className="row" style={{ gap: 8, fontSize: 14 }}>
+
+      {/* Desktop nav */}
+      <div className="topbar-nav is-desktop">
         <NavLink to="/" label="Dashboard" active={loc.pathname === "/"} />
         <NavLink to="/brands" label="Brands" active={loc.pathname.startsWith("/brands")} />
         <div ref={ref} style={{ position: "relative" }}>
@@ -63,16 +66,8 @@ export default function Topbar() {
               background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
               boxShadow: "0 16px 36px rgba(0,0,0,0.12)", padding: 8, zIndex: 50,
             }}>
-              <MenuItem
-                to="/upload" title="Upload New Codes"
-                desc="Add a fresh .xlsx batch" icon={UploadIcon}
-                active={loc.pathname === "/upload"}
-              />
-              <MenuItem
-                to="/batches" title="Batch Uploads"
-                desc="Browse, search & manage history" icon={ListIcon}
-                active={loc.pathname.startsWith("/batches")}
-              />
+              <MenuItem to="/upload" title="Upload New Codes" desc="Add a fresh .xlsx batch" icon={UploadIcon} active={loc.pathname === "/upload"} />
+              <MenuItem to="/batches" title="Batch Uploads" desc="Browse, search & manage history" icon={ListIcon} active={loc.pathname.startsWith("/batches")} />
             </div>
           )}
         </div>
@@ -81,7 +76,60 @@ export default function Topbar() {
         <span style={{ color: "#374151", fontSize: 13 }}>{email || "--"}</span>
         <button className="btn-outline" style={{ color: "#dc2626" }} onClick={logout}>Logout</button>
       </div>
+
+      {/* Mobile burger */}
+      <button
+        type="button"
+        className="topbar-burger"
+        aria-label={mobileOpen ? "Close menu" : "Open menu"}
+        onClick={() => setMobileOpen((v) => !v)}
+      >
+        {mobileOpen ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Mobile dropdown panel */}
+      {mobileOpen && (
+        <div className="topbar-mobile-panel">
+          <MobileLink to="/" label="Dashboard" active={loc.pathname === "/"} />
+          <MobileLink to="/brands" label="Brands" active={loc.pathname.startsWith("/brands")} />
+          <MobileLink to="/upload" label="Upload New Codes" active={loc.pathname === "/upload"} />
+          <MobileLink to="/batches" label="Batch Uploads" active={loc.pathname.startsWith("/batches")} />
+          <MobileLink to="/activity" label="Activity" active={loc.pathname.startsWith("/activity")} />
+          <div style={{ borderTop: "1px solid #f1f2f4", margin: "8px 0", paddingTop: 8 }}>
+            <div style={{ padding: "6px 12px", fontSize: 12, color: "#6b7280" }}>{email || "--"}</div>
+            <button
+              onClick={logout}
+              style={{
+                width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
+                border: 0, background: "transparent", color: "#dc2626", fontSize: 14, fontWeight: 600,
+              }}
+            >Logout</button>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function MobileLink({ to, label, active }: { to: string; label: string; active: boolean }) {
+  return (
+    <Link
+      to={to}
+      style={{
+        display: "block", padding: "10px 12px", borderRadius: 8, fontSize: 15,
+        color: active ? "#1b5e20" : "#111",
+        background: active ? "#e8f3ea" : "transparent",
+        fontWeight: active ? 600 : 500,
+      }}
+    >{label}</Link>
   );
 }
 
