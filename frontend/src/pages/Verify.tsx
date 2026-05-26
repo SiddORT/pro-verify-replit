@@ -12,7 +12,8 @@ type Result =
   | { status: "repeat"; brand: string; code: string; first_verified_at: string; current_scan_at: string; history: string[] }
   | { status: "invalid"; brand: string };
 
-function fmt(ts: string) { return new Date(ts).toLocaleString(); }
+import { fmtIST } from "../utils/time";
+function fmt(ts: string) { return fmtIST(ts); }
 
 export default function Verify() {
   const { slug } = useParams();

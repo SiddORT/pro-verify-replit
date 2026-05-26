@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
+import { fmtIST } from "../utils/time";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, LabelList,
   PieChart, Pie, Cell, Legend,
@@ -113,7 +114,7 @@ export default function Dashboard() {
               {filtered.slice(0, 5).map((b, i) => (
                 <tr key={b.id}>
                   <td>{i + 1}</td>
-                  <td>{new Date(b.created_at).toLocaleString()}</td>
+                  <td>{fmtIST(b.created_at)}</td>
                   <td>{b.batch_number}</td>
                   <td>{b.file_name}</td>
                   <td>{b.codes_uploaded}</td>

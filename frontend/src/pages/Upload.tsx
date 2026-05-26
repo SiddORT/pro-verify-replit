@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, apiBase } from "../api";
 import Topbar from "../components/Topbar";
 import { useToast } from "../components/Toast";
+import { fmtIST } from "../utils/time";
 
 type Report = {
   batch_id: number;
@@ -403,8 +404,8 @@ function ReportCard({ report, onUploadAnother }: { report: Report; onUploadAnoth
           <Row k="Batch Number" v={<span className="code-pill">{report.batch_number}</span>} />
           <Row k="Brand" v={<b>{report.brand_name}</b>} />
           <Row k="Source File" v={report.file_name} mono />
-          <Row k="Started" v={new Date(report.started_at).toLocaleString()} />
-          <Row k="Finished" v={new Date(report.finished_at).toLocaleString()} last />
+          <Row k="Started" v={fmtIST(report.started_at)} />
+          <Row k="Finished" v={fmtIST(report.finished_at)} last />
         </div>
 
         {/* Verify link callout */}

@@ -4,6 +4,7 @@ import { api } from "../api";
 import Topbar from "../components/Topbar";
 import ConfirmModal from "../components/ConfirmModal";
 import { useToast } from "../components/Toast";
+import { fmtIST } from "../utils/time";
 
 type Batch = {
   id: number;
@@ -273,7 +274,4 @@ function MenuRow({ icon, label, onClick, danger }: { icon: string; label: string
   );
 }
 
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
+const fmtDate = fmtIST;

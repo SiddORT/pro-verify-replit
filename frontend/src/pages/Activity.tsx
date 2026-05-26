@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
+import { fmtIST } from "../utils/time";
 
 type Row = { id: number; code: string; is_valid: boolean; created_at: string; ip: string | null; brand: string | null };
 type Brand = { id: number; name: string };
@@ -75,7 +76,7 @@ export default function Activity() {
               {rows.map((r, i) => (
                 <tr key={r.id}>
                   <td>{i + 1}</td>
-                  <td>{new Date(r.created_at).toLocaleString()}</td>
+                  <td>{fmtIST(r.created_at)}</td>
                   <td>{r.brand || "—"}</td>
                   <td><span className="code-pill">{r.code}</span></td>
                   <td>

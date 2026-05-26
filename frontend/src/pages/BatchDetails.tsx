@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
 import { useToast } from "../components/Toast";
+import { fmtIST, fmtISTLong, fmtRel } from "../utils/time";
 
 type Batch = {
   id: number;
@@ -49,17 +50,6 @@ export default function BatchDetails() {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [codesLoading, setCodesLoading] = useState(false);
   const [logsFor, setLogsFor] = useState<Code | null>(null);
-  const [logs, setLogs] = useState<LogEntry[] | null>(null);
-  const [logsLoading, setLogsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!logsFor) { setLogs(null); return; }
-    setLogsLoading(true);
-    api.get(`/api/codes/${logsFor.id}/logs`)
-      .then((r) => setLogs(r.data.items || []))
-      .catch(() => { toast("Could not load logs", "error"); setLogs([]); })
-      .finally(() => setLogsLoading(false));
-  }, [logsFor]);
 
   useEffect(() => {
     if (!id) return;
@@ -261,8 +251,6 @@ export default function BatchDetails() {
       {logsFor && (
         <LogsModal
           code={logsFor}
-          logs={logs}
-          loading={logsLoading}
           onClose={() => setLogsFor(null)}
         />
       )}
@@ -270,9 +258,18 @@ export default function BatchDetails() {
   );
 }
 
-function LogsModal({ code, logs, loading, onClose }: {
-  code: Code; logs: LogEntry[] | null; loading: boolean; onClose: () => void;
-}) {
+const LOG_PAGE_SIZE = 15;
+
+function LogsModal({ code, onClose }: { code: Code; onClose: () => void }) {
+  const toast = useToast();
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+  const [validFilter, setValidFilter] = useState<"all" | "true" | "false">("all");
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", onKey);
@@ -280,6 +277,26 @@ function LogsModal({ code, logs, loading, onClose }: {
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
   }, [onClose]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearchDebounced(search); setPage(0); }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setLoading(true);
+    const params: any = { limit: LOG_PAGE_SIZE, offset: page * LOG_PAGE_SIZE };
+    if (searchDebounced) params.search = searchDebounced;
+    if (validFilter !== "all") params.valid = validFilter;
+    api.get(`/api/codes/${code.id}/logs`, { params })
+      .then((r) => { setLogs(r.data.items || []); setTotal(r.data.total || 0); })
+      .catch(() => { toast("Could not load logs", "error"); setLogs([]); setTotal(0); })
+      .finally(() => setLoading(false));
+  }, [code.id, page, searchDebounced, validFilter, toast]);
+
+  const pages = Math.max(1, Math.ceil(total / LOG_PAGE_SIZE));
+  const start = total === 0 ? 0 : page * LOG_PAGE_SIZE + 1;
+  const end = Math.min(total, (page + 1) * LOG_PAGE_SIZE);
 
   return (
     <div
@@ -301,10 +318,10 @@ function LogsModal({ code, logs, loading, onClose }: {
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f2f4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <div>
             <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Verification Logs</div>
-            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span className="code-pill">{code.code}</span>
               <span style={{ color: "#6b7280", fontSize: 13, fontWeight: 400 }}>
-                · {code.verification_count.toLocaleString()} valid verification{code.verification_count === 1 ? "" : "s"}
+                · {code.verification_count.toLocaleString()} valid scan{code.verification_count === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -316,20 +333,51 @@ function LogsModal({ code, logs, loading, onClose }: {
           >×</button>
         </div>
 
+        {/* Toolbar */}
+        <div style={{ padding: 14, borderBottom: "1px solid #f1f2f4", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: "1 1 240px", maxWidth: 360 }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af", fontSize: 13 }}>🔍</span>
+            <input
+              className="input"
+              placeholder="Search IP or device…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%", paddingLeft: 32 }}
+            />
+          </div>
+          <select
+            className="input"
+            value={validFilter}
+            onChange={(e) => { setValidFilter(e.target.value as any); setPage(0); }}
+            style={{ width: "auto", minWidth: 130 }}
+          >
+            <option value="all">All results</option>
+            <option value="true">Valid only</option>
+            <option value="false">Invalid only</option>
+          </select>
+          {(search || validFilter !== "all") && (
+            <button type="button" className="btn-outline"
+                    onClick={() => { setSearch(""); setValidFilter("all"); setPage(0); }}>Clear</button>
+          )}
+          <div style={{ marginLeft: "auto", fontSize: 12, color: "#6b7280" }}>
+            {loading ? "Loading…" : total === 0 ? "No matches" : `Showing ${start}–${end} of ${total.toLocaleString()}`}
+          </div>
+        </div>
+
         <div style={{ overflowY: "auto", flex: 1 }}>
-          {loading ? (
+          {loading && logs.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Loading logs…</div>
-          ) : !logs || logs.length === 0 ? (
+          ) : logs.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
               <div style={{ fontSize: 28, opacity: 0.4, marginBottom: 8 }}>📋</div>
-              No verification logs found for this code.
+              {search || validFilter !== "all" ? "No logs match these filters." : "No verification logs found for this code."}
             </div>
           ) : (
             <table className="table" style={{ width: "100%" }}>
               <thead>
                 <tr>
-                  <th style={{ width: 48 }}>#</th>
-                  <th>When</th>
+                  <th style={{ width: 56 }}>#</th>
+                  <th>When (IST)</th>
                   <th>Result</th>
                   <th>IP Address</th>
                   <th>Device / User Agent</th>
@@ -338,9 +386,9 @@ function LogsModal({ code, logs, loading, onClose }: {
               <tbody>
                 {logs.map((l, i) => (
                   <tr key={l.id}>
-                    <td style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
+                    <td style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>{page * LOG_PAGE_SIZE + i + 1}</td>
                     <td style={{ fontSize: 13 }}>
-                      <div>{fmtDate(l.created_at)}</div>
+                      <div>{fmtISTLong(l.created_at)}</div>
                       <div style={{ fontSize: 11, color: "#6b7280" }}>{fmtRel(l.created_at)}</div>
                     </td>
                     <td>
@@ -361,11 +409,21 @@ function LogsModal({ code, logs, loading, onClose }: {
           )}
         </div>
 
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f2f4", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>
-            {logs && logs.length >= 200 && "Showing most recent 200 entries"}
-          </span>
-          <button type="button" className="btn" onClick={onClose}>Close</button>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f2f4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: "#6b7280" }}>
+            {total > 0 && <>Page <b>{page + 1}</b> of <b>{pages}</b></>}
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {total > LOG_PAGE_SIZE && (
+              <>
+                <button className="btn-outline" disabled={page === 0} onClick={() => setPage(0)}>« First</button>
+                <button className="btn-outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
+                <button className="btn-outline" disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>Next ›</button>
+                <button className="btn-outline" disabled={page + 1 >= pages} onClick={() => setPage(pages - 1)}>Last »</button>
+              </>
+            )}
+            <button type="button" className="btn" onClick={onClose}>Close</button>
+          </div>
         </div>
       </div>
     </div>
@@ -400,21 +458,8 @@ function StatTile({ label, value, sub, accent }: { label: string; value: string;
   );
 }
 
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-function fmtRel(iso: string) {
-  const d = new Date(iso).getTime();
-  const diff = Date.now() - d;
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
-  const dys = Math.floor(h / 24); if (dys < 30) return `${dys}d ago`;
-  const mo = Math.floor(dys / 30); if (mo < 12) return `${mo}mo ago`;
-  return `${Math.floor(mo / 12)}y ago`;
-}
+const fmtDate = fmtIST;
+
 function pct(part: number, whole: number) {
   if (!whole) return "0% verified";
   return `${Math.round((part / whole) * 1000) / 10}% verified`;

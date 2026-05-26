@@ -558,11 +558,15 @@ def batch_codes(
 @app.get("/api/codes/{code_id}/logs")
 def code_logs(
     code_id: int,
-    limit: int = 200,
+    search: Optional[str] = None,
+    valid: Optional[str] = None,
+    limit: int = 25,
+    offset: int = 0,
     db: Session = Depends(get_db),
     admin=Depends(current_admin),
 ):
-    limit = min(max(limit, 1), 1000)
+    limit = min(max(limit, 1), 500)
+    offset = max(offset, 0)
     pc = db.execute(text("""
         SELECT pc.id, pc.code, pc.brand_id, br.name, br.slug
         FROM product_codes pc LEFT JOIN brands br ON br.id = pc.brand_id
@@ -570,18 +574,35 @@ def code_logs(
     """), {"i": code_id}).first()
     if not pc:
         raise HTTPException(404, "Code not found")
-    rows = db.execute(text("""
+    where = ["code = :c", "brand_id = :b"]
+    params: dict = {"c": pc[1], "b": pc[2]}
+    if search:
+        where.append("(CAST(ip_address AS TEXT) ILIKE :q OR user_agent ILIKE :q)")
+        params["q"] = f"%{search}%"
+    if valid == "true":
+        where.append("is_valid = TRUE")
+    elif valid == "false":
+        where.append("is_valid = FALSE")
+    w = " AND ".join(where)
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM verification_logs WHERE {w}"), params
+    ).scalar() or 0
+    params["l"] = limit
+    params["o"] = offset
+    rows = db.execute(text(f"""
         SELECT id, is_valid, created_at, ip_address, user_agent
         FROM verification_logs
-        WHERE code = :c AND brand_id = :b
+        WHERE {w}
         ORDER BY created_at DESC, id DESC
-        LIMIT :l
-    """), {"c": pc[1], "b": pc[2], "l": limit}).all()
+        LIMIT :l OFFSET :o
+    """), params).all()
     return {
         "code": pc[1],
         "brand_name": pc[3],
         "brand_slug": pc[4],
-        "total": len(rows),
+        "total": int(total),
+        "limit": limit,
+        "offset": offset,
         "items": [
             {
                 "id": r[0], "is_valid": r[1],
