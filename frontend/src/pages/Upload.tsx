@@ -8,6 +8,11 @@ type Report = {
   batch_id: number;
   batch_number: string;
   codes_uploaded: number;
+  rows_processed: number;
+  duplicates_in_file: number;
+  duplicates_in_db: number;
+  duplicate_samples_in_file: string[];
+  duplicate_samples_in_db: string[];
   file_name: string;
   file_size_kb: number;
   brand_name: string;
@@ -50,6 +55,11 @@ export default function Upload() {
         batch_id: r.data.batch_id,
         batch_number: r.data.batch_number,
         codes_uploaded: r.data.codes_uploaded,
+        rows_processed: r.data.rows_processed ?? r.data.codes_uploaded,
+        duplicates_in_file: r.data.duplicates_in_file ?? 0,
+        duplicates_in_db: r.data.duplicates_in_db ?? 0,
+        duplicate_samples_in_file: r.data.duplicate_samples_in_file ?? [],
+        duplicate_samples_in_db: r.data.duplicate_samples_in_db ?? [],
         file_name: file.name,
         file_size_kb: file.size / 1024,
         brand_name: brand?.name || "—",
@@ -58,7 +68,12 @@ export default function Upload() {
         finished_at: new Date(finished).toISOString(),
         duration_ms: finished - start,
       });
-      toast(`Uploaded ${r.data.codes_uploaded} codes`);
+      const dupes = (r.data.duplicates_in_file ?? 0) + (r.data.duplicates_in_db ?? 0);
+      toast(
+        dupes > 0
+          ? `Uploaded ${r.data.codes_uploaded} codes (${dupes} duplicates skipped)`
+          : `Uploaded ${r.data.codes_uploaded} codes`
+      );
       setFile(null); if (fRef.current) fRef.current.value = "";
     } catch (e: any) {
       const msg = e?.response?.data?.detail || "Upload failed";
@@ -373,10 +388,15 @@ function ReportCard({ report, onUploadAnother }: { report: Report; onUploadAnoth
       <div style={{ padding: 28 }}>
         <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
           <Metric label="Codes Uploaded" value={report.codes_uploaded.toLocaleString()} accent="#1b5e20" />
+          <Metric label="Rows Processed" value={report.rows_processed.toLocaleString()} />
+          <Metric label="Duplicates Skipped" value={(report.duplicates_in_file + report.duplicates_in_db).toLocaleString()}
+                  accent={(report.duplicates_in_file + report.duplicates_in_db) > 0 ? "#b45309" : undefined} />
           <Metric label="Processing Time" value={fmtDuration(report.duration_ms)} />
-          <Metric label="Throughput" value={`${rate.toLocaleString()}/s`} />
-          <Metric label="File Size" value={`${report.file_size_kb < 1024 ? report.file_size_kb.toFixed(1) + " KB" : (report.file_size_kb / 1024).toFixed(2) + " MB"}`} />
         </div>
+
+        {(report.duplicates_in_file > 0 || report.duplicates_in_db > 0) && (
+          <DuplicatesCard report={report} />
+        )}
 
         {/* Detail rows */}
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
@@ -409,6 +429,83 @@ function ReportCard({ report, onUploadAnother }: { report: Report; onUploadAnoth
           <button className="btn" onClick={onUploadAnother}>Upload Another File</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DuplicatesCard({ report }: { report: Report }) {
+  const totalDupes = report.duplicates_in_file + report.duplicates_in_db;
+  return (
+    <div style={{
+      marginBottom: 18, padding: 0, background: "#fffbeb", border: "1px solid #fde68a",
+      borderRadius: 10, overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "14px 18px", background: "#fef3c7", borderBottom: "1px solid #fde68a",
+        display: "flex", alignItems: "center", gap: 12,
+      }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: "50%", background: "#b45309", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0,
+        }}>!</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, color: "#78350f", fontSize: 15 }}>
+            {totalDupes.toLocaleString()} duplicate {totalDupes === 1 ? "code" : "codes"} skipped
+          </div>
+          <div style={{ fontSize: 12, color: "#92400e", marginTop: 2 }}>
+            These were not inserted to keep your codes unique per brand. The uploaded codes above are net new.
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+        <DupColumn
+          title="Duplicates within this file"
+          desc="Same code appeared more than once in the uploaded Excel."
+          count={report.duplicates_in_file}
+          samples={report.duplicate_samples_in_file}
+        />
+        <div style={{ borderLeft: "1px solid #fde68a" }}>
+          <DupColumn
+            title="Already exists for this brand"
+            desc="These codes were already registered from a previous upload."
+            count={report.duplicates_in_db}
+            samples={report.duplicate_samples_in_db}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DupColumn({ title, desc, count, samples }: { title: string; desc: string; count: number; samples: string[] }) {
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 22, fontWeight: 700, color: count > 0 ? "#b45309" : "#9ca3af" }}>
+          {count.toLocaleString()}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#78350f", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {title}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: "#92400e", marginBottom: 10 }}>{desc}</div>
+      {count > 0 && samples.length > 0 ? (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#78350f", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 6 }}>
+            Sample {samples.length < count ? `(${samples.length} of ${count.toLocaleString()})` : ""}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 110, overflowY: "auto" }}>
+            {samples.map((c, i) => (
+              <span key={i} style={{
+                background: "#fff", border: "1px solid #fde68a", padding: "3px 8px", borderRadius: 4,
+                fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: "#78350f",
+              }}>{c}</span>
+            ))}
+          </div>
+        </>
+      ) : count === 0 ? (
+        <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>None</div>
+      ) : null}
     </div>
   );
 }

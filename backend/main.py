@@ -36,6 +36,32 @@ def verify_password(p: str, h: str) -> bool:
         return False
 
 app = FastAPI(title="PROverify API")
+
+
+@app.on_event("startup")
+def _ensure_schema_constraints() -> None:
+    """Ensure product_codes has a UNIQUE (brand_id, code) constraint.
+
+    The upload endpoint relies on `INSERT ... ON CONFLICT (brand_id, code)`
+    to skip duplicates. This makes that requirement self-healing on any
+    fresh environment without requiring an out-of-band migration.
+    """
+    from sqlalchemy import text as _text
+    with engine.begin() as conn:
+        exists = conn.execute(_text(
+            "SELECT 1 FROM pg_constraint WHERE conname = 'product_codes_brand_code_unique'"
+        )).first()
+        if exists:
+            return
+        # Dedupe any pre-existing rows so the constraint can be added cleanly.
+        conn.execute(_text(
+            "DELETE FROM product_codes a USING product_codes b "
+            "WHERE a.ctid < b.ctid AND a.brand_id = b.brand_id AND a.code = b.code"
+        ))
+        conn.execute(_text(
+            "ALTER TABLE product_codes "
+            "ADD CONSTRAINT product_codes_brand_code_unique UNIQUE (brand_id, code)"
+        ))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -258,15 +284,46 @@ async def upload_codes(
         batch_id = batch_row[0]
         db.commit()
 
-        # Streaming batched insert
+        # Streaming batched insert with duplicate tracking.
+        # In-file dupes (same code appears twice in the xlsx) and DB dupes
+        # (code already exists for this brand from a prior upload) are skipped
+        # via ON CONFLICT, and counted separately.
+        from psycopg2.extras import execute_values
         CHUNK = 5000
+        SAMPLE_LIMIT = 15
         chunk: List[tuple] = []
-        total = 0
+        seen_in_file: set = set()
+        total_rows = 0
+        in_file_dupes = 0
+        db_dupes = 0
+        file_dup_samples: List[str] = []
+        db_dup_samples: List[str] = []
+        inserted = 0
+
+        def flush(cur, chunk_):
+            nonlocal inserted, db_dupes
+            if not chunk_:
+                return
+            result = execute_values(
+                cur,
+                "INSERT INTO product_codes (code, brand_id, batch_id) VALUES %s "
+                "ON CONFLICT (brand_id, code) DO NOTHING RETURNING code",
+                chunk_,
+                template="(%s,%s,%s)",
+                fetch=True,
+            )
+            inserted_codes = {r[0] for r in result}
+            inserted += len(inserted_codes)
+            for c, _, _ in chunk_:
+                if c not in inserted_codes:
+                    db_dupes += 1
+                    if len(db_dup_samples) < SAMPLE_LIMIT:
+                        db_dup_samples.append(c)
+
         conn = engine.raw_connection()
         try:
             try:
                 cur = conn.cursor()
-                sql = "INSERT INTO product_codes (code, brand_id, batch_id) VALUES (%s, %s, %s)"
                 for row in ws.iter_rows(min_row=2, values_only=True):
                     if not row or code_idx >= len(row):
                         continue
@@ -276,14 +333,18 @@ async def upload_codes(
                     code = str(val).strip()
                     if not code:
                         continue
+                    total_rows += 1
+                    if code in seen_in_file:
+                        in_file_dupes += 1
+                        if len(file_dup_samples) < SAMPLE_LIMIT:
+                            file_dup_samples.append(code)
+                        continue
+                    seen_in_file.add(code)
                     chunk.append((code, brand_id, batch_id))
                     if len(chunk) >= CHUNK:
-                        cur.executemany(sql, chunk)
-                        total += len(chunk)
+                        flush(cur, chunk)
                         chunk = []
-                if chunk:
-                    cur.executemany(sql, chunk)
-                    total += len(chunk)
+                flush(cur, chunk)
                 conn.commit()
                 cur.close()
             except Exception:
@@ -292,9 +353,18 @@ async def upload_codes(
         finally:
             conn.close()
 
-        db.execute(text("UPDATE upload_batches SET codes_uploaded=:c WHERE id=:i"), {"c": total, "i": batch_id})
+        db.execute(text("UPDATE upload_batches SET codes_uploaded=:c WHERE id=:i"), {"c": inserted, "i": batch_id})
         db.commit()
-        return {"batch_id": batch_id, "batch_number": batch_number, "codes_uploaded": total}
+        return {
+            "batch_id": batch_id,
+            "batch_number": batch_number,
+            "codes_uploaded": inserted,
+            "rows_processed": total_rows,
+            "duplicates_in_file": in_file_dupes,
+            "duplicates_in_db": db_dupes,
+            "duplicate_samples_in_file": file_dup_samples,
+            "duplicate_samples_in_db": db_dup_samples,
+        }
 
     except HTTPException:
         if batch_id is not None:
