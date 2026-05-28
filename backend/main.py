@@ -59,11 +59,7 @@ app = FastAPI(title="PROverify API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://proverify.ortdemo.com",
-        "https://proverify.onlines",
-    ],
+    allow_origin_regex=r".*",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
