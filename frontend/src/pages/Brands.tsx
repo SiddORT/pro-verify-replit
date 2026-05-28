@@ -105,32 +105,25 @@ export default function Brands() {
       <Topbar />
       <div className="page">
         <Link to="/" className="back-link">← Back to Dashboard</Link>
-        <h1 className="page-title">Brand Master</h1>
-        <p className="page-sub">Add and manage brands for product code mapping</p>
-
-        <form onSubmit={save} className="card" style={{ marginBottom: 24 }}>
-          <div
-            onClick={() => !editingId && setFormOpen((v) => !v)}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              cursor: editingId ? "default" : "pointer",
-              marginBottom: formOpen ? 18 : 0,
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 16 }}>{editingId ? "Edit Brand" : "Add New Brand"}</h3>
-            {!editingId && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setFormOpen((v) => !v); }}
-                className={formOpen ? "btn-outline" : "btn"}
-                title={formOpen ? "Collapse" : "Expand"}
-              >
-                {formOpen ? "− Collapse" : "+ Add Brand"}
-              </button>
-            )}
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 14 }}>
+          <div>
+            <h1 className="page-title" style={{ marginBottom: 4 }}>Brand Master</h1>
+            <p className="page-sub" style={{ margin: 0 }}>Add and manage brands for product code mapping</p>
           </div>
-          {!formOpen && !editingId ? null : (
-          <>
+          {!editingId && (
+            <button
+              type="button"
+              onClick={() => setFormOpen((v) => !v)}
+              className={formOpen ? "btn-outline" : "btn"}
+            >
+              {formOpen ? "− Collapse" : "+ Add Brand"}
+            </button>
+          )}
+        </div>
+
+        {(formOpen || editingId) && (
+        <form onSubmit={save} className="card" style={{ marginBottom: 24 }}>
+          <h3 style={{ margin: "0 0 18px", fontSize: 16 }}>{editingId ? "Edit Brand" : "Add New Brand"}</h3>
           <div className="grid-2" style={{ marginBottom: 16 }}>
             <div>
               <label className="label">Brand Name<Req /></label>
@@ -163,9 +156,8 @@ export default function Brands() {
             <button type="button" className="btn-outline" onClick={reset}>Cancel</button>
             <button className="btn" type="submit" disabled={saving}>{saving ? "Saving..." : (editingId ? "Update Brand" : "Add Brand")}</button>
           </div>
-          </>
-          )}
         </form>
+        )}
 
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
