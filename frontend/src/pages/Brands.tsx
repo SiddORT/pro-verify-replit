@@ -14,9 +14,10 @@ async function uploadImage(f: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", f);
   fd.append("folder", "brands");
-  const r = await api.post("/api/uploads/image", fd, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  // Do NOT set Content-Type manually — axios/browser sets it with the
+  // correct multipart boundary automatically. Overriding it strips the
+  // boundary and the server can't parse the body.
+  const r = await api.post("/api/uploads/image", fd);
   return r.data.url as string;
 }
 

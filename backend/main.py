@@ -289,12 +289,15 @@ _UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
 _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 (_UPLOADS_DIR / "brands").mkdir(parents=True, exist_ok=True)
 
-_ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+_ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".heic", ".heif", ".avif"}
+_MAX_IMAGE_BYTES = 15 * 1024 * 1024  # 15 MB
 
 
 def _sniff_image_kind(data: bytes) -> Optional[str]:
-    """Return 'png'|'jpg'|'gif'|'webp' from the file's magic bytes, or None."""
+    """Return canonical extension from magic bytes (or 'svg' from text scan).
+
+    Recognises: PNG, JPG, GIF, WEBP, BMP, SVG, HEIC/HEIF, AVIF.
+    """
     if len(data) < 12:
         return None
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -303,8 +306,22 @@ def _sniff_image_kind(data: bytes) -> Optional[str]:
         return "jpg"
     if data[:6] in (b"GIF87a", b"GIF89a"):
         return "gif"
+    if data[:2] == b"BM":
+        return "bmp"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "webp"
+    # ISO BMFF (HEIC/HEIF/AVIF): bytes 4..8 == 'ftyp', brand in 8..12
+    if data[4:8] == b"ftyp":
+        brand = data[8:12]
+        if brand in (b"heic", b"heix", b"mif1", b"msf1", b"heim", b"heis"):
+            return "heic"
+        if brand in (b"avif", b"avis"):
+            return "avif"
+    # SVG: text-based, sniff first 1KB for <svg
+    head = data[:1024].lstrip().lower()
+    if head.startswith(b"<?xml") or head.startswith(b"<svg"):
+        if b"<svg" in head:
+            return "svg"
     return None
 
 
