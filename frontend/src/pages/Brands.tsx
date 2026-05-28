@@ -122,13 +122,8 @@ export default function Brands() {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setFormOpen((v) => !v); }}
-                className="btn-icon"
+                className={formOpen ? "btn-outline" : "btn"}
                 title={formOpen ? "Collapse" : "Expand"}
-                style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  gap: 6, padding: "6px 12px", fontSize: 13, fontWeight: 600,
-                  color: "#1b5e20", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff",
-                }}
               >
                 {formOpen ? "− Collapse" : "+ Add Brand"}
               </button>
