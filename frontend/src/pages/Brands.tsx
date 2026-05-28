@@ -67,6 +67,8 @@ export default function Brands() {
   const toast = useToast();
   const [brands, setBrands] = useState<any[]>([]);
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [color, setColor] = useState("#1b5e20");
   const [desktop, setDesktop] = useState<string | null>(null);
   const [mobile, setMobile] = useState<string | null>(null);
@@ -85,18 +87,35 @@ export default function Brands() {
   useEffect(() => { load(); }, []);
 
   function reset() {
-    setName(""); setColor("#1b5e20"); setDesktop(null); setMobile(null); setEditingId(null);
+    setName(""); setSlug(""); setSlugTouched(false);
+    setColor("#1b5e20"); setDesktop(null); setMobile(null); setEditingId(null);
     setFormOpen(false);
     if (dRef.current) dRef.current.value = "";
     if (mRef.current) mRef.current.value = "";
   }
 
+  // Keep slug auto-synced with the name UNTIL the user manually edits it,
+  // then leave it alone so they retain control.
+  function onNameChange(v: string) {
+    setName(v);
+    if (!slugTouched) setSlug(slugify(v));
+  }
+  function onSlugChange(v: string) {
+    // Live-normalize as the user types: lowercase, only [a-z0-9-], no
+    // leading/trailing dashes. We don't collapse consecutive dashes so they
+    // can still type them mid-word.
+    const cleaned = v.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+/, "");
+    setSlug(cleaned);
+    setSlugTouched(true);
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { toast("Brand name is required", "error"); return; }
+    const finalSlug = slugify(slug || name);
     setSaving(true);
     try {
-      const body = { name, primary_color: color, desktop_image: desktop, mobile_image: mobile, is_active: true };
+      const body = { name, slug: finalSlug, primary_color: color, desktop_image: desktop, mobile_image: mobile, is_active: true };
       if (editingId) {
         await api.put(`/api/brands/${editingId}`, body);
         toast("Brand updated successfully");
@@ -113,7 +132,12 @@ export default function Brands() {
 
   async function edit(b: any) {
     setEditingId(b.id);
-    setName(b.name); setColor(b.primary_color || "#1b5e20");
+    setName(b.name);
+    setSlug(b.slug || slugify(b.name));
+    // Editing always considers the slug "touched" so it doesn't get
+    // overwritten if the admin tweaks the name while editing.
+    setSlugTouched(true);
+    setColor(b.primary_color || "#1b5e20");
     setDesktop(b.desktop_image || null); setMobile(b.mobile_image || null);
     setFormOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -137,7 +161,7 @@ export default function Brands() {
   }
 
   function verifyUrl(slug: string) {
-    return `${window.location.origin}/verify/${slug}`;
+    return `${window.location.origin}/${slug}`;
   }
 
   const filtered = brands.filter((b) => !q || b.name.toLowerCase().includes(q.toLowerCase()));
@@ -169,11 +193,20 @@ export default function Brands() {
           <div className="grid-2" style={{ marginBottom: 16 }}>
             <div>
               <label className="label">Brand Name<Req /></label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter brand name" required />
+              <input className="input" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Enter brand name" required />
             </div>
             <div>
-              <label className="label">Slug (auto-generated)</label>
-              <input className="input" value={slugify(name)} readOnly style={{ background: "#f9fafb" }} />
+              <label className="label">Slug<Req /></label>
+              <input
+                className="input"
+                value={slug}
+                onChange={(e) => onSlugChange(e.target.value)}
+                placeholder="brand-slug"
+                required
+              />
+              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
+                Public URL: <code>{window.location.origin}/{slug || "brand-slug"}</code>
+              </div>
             </div>
           </div>
           <div style={{ marginBottom: 16 }}>
@@ -243,7 +276,7 @@ export default function Brands() {
                   <td>
                     <div className="row" style={{ gap: 4 }}>
                       <a
-                        href={`/verify/${b.slug}`}
+                        href={`/${b.slug}`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-icon"

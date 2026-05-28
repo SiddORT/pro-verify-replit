@@ -94,15 +94,33 @@ def seed_admin():
         return
     db = SessionLocal()
     try:
+        # Upsert + decommission: this app intentionally supports a single
+        # bootstrap admin sourced from env. On rotation we must (a) ensure
+        # the configured row exists with the right password AND (b) purge
+        # any other admin rows so an old email/password can never linger
+        # and continue to authenticate after rotation.
         row = db.execute(
-            text("SELECT id FROM admins WHERE email=:e"), {"e": email}
+            text("SELECT id, password_hash FROM admins WHERE email=:e"),
+            {"e": email},
         ).first()
+        new_hash = hash_password(password)
         if not row:
             db.execute(
                 text("INSERT INTO admins (email, password_hash) VALUES (:e,:p)"),
-                {"e": email, "p": hash_password(password)},
+                {"e": email, "p": new_hash},
             )
-            db.commit()
+        elif not verify_password(password, row[1]):
+            # Only rewrite the hash if it doesn't already match (avoids a
+            # write on every boot).
+            db.execute(
+                text("UPDATE admins SET password_hash=:p WHERE id=:i"),
+                {"p": new_hash, "i": row[0]},
+            )
+        # Decommission any other admin rows — there should only ever be one.
+        db.execute(
+            text("DELETE FROM admins WHERE email<>:e"), {"e": email},
+        )
+        db.commit()
     finally:
         db.close()
 
@@ -144,6 +162,7 @@ class LoginIn(BaseModel):
 
 class BrandIn(BaseModel):
     name: str
+    slug: Optional[str] = None
     primary_color: Optional[str] = "#1b5e20"
     desktop_image: Optional[str] = None
     mobile_image: Optional[str] = None
@@ -169,6 +188,16 @@ def me(admin=Depends(current_admin)):
 
 
 # ---------- Helpers ----------
+# Slugs that would collide with admin UI routes or static mounts. A brand
+# slug equal to any of these would shadow the route under the new
+# prefix-less `/<slug>` URL scheme, so we refuse them.
+_RESERVED_SLUGS = {
+    "api", "uploads", "login", "logout", "brands", "upload",
+    "batches", "activity", "dashboard", "verify", "admin",
+    "assets", "static", "favicon.ico", "robots.txt",
+}
+
+
 def slugify(name: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9]+", "-", name.strip().lower()).strip("-")
     return s or "brand"
@@ -178,6 +207,10 @@ def unique_slug(db: Session, base: str, ignore_id: Optional[int] = None) -> str:
     slug = base
     i = 2
     while True:
+        if slug in _RESERVED_SLUGS:
+            slug = f"{base}-{i}"
+            i += 1
+            continue
         q = "SELECT id FROM brands WHERE slug=:s"
         params = {"s": slug}
         if ignore_id:
@@ -221,7 +254,8 @@ def list_brands(
 def create_brand(
     data: BrandIn, db: Session = Depends(get_db), admin=Depends(current_admin)
 ):
-    slug = unique_slug(db, slugify(data.name))
+    base = slugify(data.slug) if data.slug else slugify(data.name)
+    slug = unique_slug(db, base)
     row = db.execute(
         text("""INSERT INTO brands (name, slug, primary_color, desktop_image, mobile_image, is_active)
                 VALUES (:n,:s,:c,:d,:m,:a) RETURNING id"""),
@@ -250,7 +284,8 @@ def update_brand(
     ).first()
     if not existing:
         raise HTTPException(404, "Brand not found")
-    slug = unique_slug(db, slugify(data.name), ignore_id=brand_id)
+    base = slugify(data.slug) if data.slug else slugify(data.name)
+    slug = unique_slug(db, base, ignore_id=brand_id)
     db.execute(
         text("""UPDATE brands SET name=:n, slug=:s, primary_color=:c, desktop_image=:d,
                 mobile_image=:m, is_active=:a, updated_at=NOW() WHERE id=:i"""),

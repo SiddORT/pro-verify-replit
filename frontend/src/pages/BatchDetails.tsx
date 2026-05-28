@@ -108,12 +108,12 @@ export default function BatchDetails() {
                   Batch <span style={{ color: "#1b5e20" }}>{batch.batch_number}</span>
                 </h1>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13, color: "#6b7280" }}>
-                  <span><b style={{ color: "#111" }}>{batch.brand_name}</b> • /verify/{batch.brand_slug}</span>
+                  <span><b style={{ color: "#111" }}>{batch.brand_name}</b> • /{batch.brand_slug}</span>
                   <span>📄 {batch.file_name}</span>
                   <span>🕒 {fmtDate(batch.created_at)}</span>
                 </div>
               </div>
-              <Link to={`/verify/${batch.brand_slug}`} target="_blank" className="btn-outline">
+              <Link to={`/${batch.brand_slug}`} target="_blank" className="btn-outline">
                 Open Verify Page ↗
               </Link>
             </div>

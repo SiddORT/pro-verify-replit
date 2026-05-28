@@ -146,7 +146,7 @@ export default function Upload() {
                     <div>
                       <div style={{ fontWeight: 600 }}>{selectedBrand.name}</div>
                       <div style={{ fontSize: 12, color: "#6b7280", fontFamily: "ui-monospace, Menlo, monospace" }}>
-                        /verify/{selectedBrand.slug}
+                        /{selectedBrand.slug}
                       </div>
                     </div>
                     <div style={{ flex: 1 }} />
@@ -343,7 +343,7 @@ function Tip({ ok, text }: { ok: boolean; text: string }) {
 
 function ReportCard({ report, onUploadAnother }: { report: Report; onUploadAnother: () => void }) {
   const toast = useToast();
-  const verifyUrl = `${window.location.origin}/verify/${report.brand_slug}`;
+  const verifyUrl = `${window.location.origin}/${report.brand_slug}`;
   const rate = report.duration_ms > 0 ? Math.round((report.codes_uploaded / (report.duration_ms / 1000))) : 0;
   const isNarrow = typeof window !== "undefined" && window.innerWidth < 640;
 

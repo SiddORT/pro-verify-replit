@@ -159,7 +159,7 @@ export default function BatchUploads() {
                     <td><span className="code-pill">{b.batch_number}</span></td>
                     <td>
                       <div style={{ fontWeight: 500 }}>{b.brand_name}</div>
-                      <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "ui-monospace, Menlo, monospace" }}>/verify/{b.brand_slug}</div>
+                      <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "ui-monospace, Menlo, monospace" }}>/{b.brand_slug}</div>
                     </td>
                     <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.file_name}>
                       {b.file_name}
