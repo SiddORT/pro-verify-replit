@@ -249,10 +249,23 @@ function ImagePicker({ title, sub, value, onChange, inputRef }: any) {
     if (!f) return;
     setBusy(true);
     try {
+      console.log("[ImagePicker] uploading", { name: f.name, type: f.type, size: f.size });
       const url = await uploadImage(f);
+      console.log("[ImagePicker] upload OK ->", url);
       onChange(url);
     } catch (e: any) {
-      toast(e?.response?.data?.detail || "Image upload failed", "error");
+      console.error("[ImagePicker] upload FAILED", {
+        message: e?.message,
+        status: e?.response?.status,
+        data: e?.response?.data,
+        code: e?.code,
+        error: e,
+      });
+      const msg =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "Image upload failed";
+      toast(`Upload failed: ${msg}`, "error");
       if (inputRef.current) inputRef.current.value = "";
     } finally {
       setBusy(false);
