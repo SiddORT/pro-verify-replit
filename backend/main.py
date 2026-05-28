@@ -62,6 +62,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://proverify.ortdemo.com",
+        "https://proverify.onlines",
     ],
     allow_credentials=False,
     allow_methods=["*"],

@@ -67,12 +67,32 @@ export default function Verify() {
   const bg = (isMobile ? brand.mobile_image : brand.desktop_image) || brand.desktop_image || brand.mobile_image;
   const color = brand.primary_color || "#1b5e20";
 
-  const pageBg = bg
-    ? `linear-gradient(135deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.55) 100%), url(${bg}) center/cover no-repeat`
-    : `linear-gradient(135deg, ${color} 0%, ${darken(color, 30)} 100%)`;
+  const fallbackBg = `linear-gradient(135deg, ${color} 0%, ${darken(color, 30)} 100%)`;
 
   return (
-    <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", position: "relative", background: bg ? "#0f172a" : fallbackBg, display: "flex", flexDirection: "column" }}>
+      {bg && (
+        <>
+          <div
+            aria-hidden
+            style={{
+              position: "fixed", inset: 0, zIndex: 0,
+              backgroundImage: `url(${bg})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+            }}
+          />
+          <div
+            aria-hidden
+            style={{
+              position: "fixed", inset: 0, zIndex: 0,
+              background: "linear-gradient(135deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.55) 100%)",
+            }}
+          />
+        </>
+      )}
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", flex: 1, minHeight: "100vh" }}>
       {/* Header */}
       <header style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <BrandMark color="#fff" accent="#86efac" />
@@ -158,6 +178,7 @@ export default function Verify() {
       <footer style={{ padding: "16px 24px", textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 12 }}>
         Protected by <b style={{ color: "#fff" }}>PROverify</b> — trusted product authentication
       </footer>
+      </div>
     </div>
   );
 }
