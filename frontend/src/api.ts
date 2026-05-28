@@ -43,3 +43,13 @@ api.interceptors.response.use(
 );
 
 export const apiBase = API_BASE;
+
+// Resolve an image/asset URL returned by the backend (e.g. "/uploads/brands/xx.png")
+// into a fully-qualified URL the browser can load. Pass through absolute URLs
+// (data:, http(s):, blob:) unchanged.
+export function assetUrl(u: string | null | undefined): string {
+  if (!u) return "";
+  if (/^(data:|blob:|https?:\/\/)/i.test(u)) return u;
+  if (u.startsWith("/")) return `${API_BASE}${u}`;
+  return u;
+}

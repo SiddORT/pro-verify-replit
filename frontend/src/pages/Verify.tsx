@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, assetUrl } from "../api";
 
 type Brand = {
   id: number; name: string; slug: string;
@@ -64,7 +64,8 @@ export default function Verify() {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>Loading…</div>;
   }
 
-  const bg = (isMobile ? brand.mobile_image : brand.desktop_image) || brand.desktop_image || brand.mobile_image;
+  const bgRaw = (isMobile ? brand.mobile_image : brand.desktop_image) || brand.desktop_image || brand.mobile_image;
+  const bg = assetUrl(bgRaw);
   const color = brand.primary_color || "#1b5e20";
 
   const fallbackBg = `linear-gradient(135deg, ${color} 0%, ${darken(color, 30)} 100%)`;

@@ -284,6 +284,58 @@ def delete_brand(
     return {"ok": True}
 
 
+# ---------- Image Upload (saved to disk, returns public path) ----------
+_UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
+_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+(_UPLOADS_DIR / "brands").mkdir(parents=True, exist_ok=True)
+
+_ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _sniff_image_kind(data: bytes) -> Optional[str]:
+    """Return 'png'|'jpg'|'gif'|'webp' from the file's magic bytes, or None."""
+    if len(data) < 12:
+        return None
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+@app.post("/api/uploads/image")
+async def upload_image(
+    file: UploadFile = File(...),
+    folder: str = Form("brands"),
+    admin=Depends(current_admin),
+):
+    safe_folder = re.sub(r"[^a-z0-9_-]", "", folder.lower()) or "misc"
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _ALLOWED_IMAGE_EXT:
+        raise HTTPException(400, f"Unsupported image type '{ext}'. Allowed: {', '.join(sorted(_ALLOWED_IMAGE_EXT))}")
+    data = await file.read()
+    if len(data) > _MAX_IMAGE_BYTES:
+        raise HTTPException(413, f"Image too large ({len(data)/1024/1024:.1f} MB). Max 10 MB.")
+    kind = _sniff_image_kind(data)
+    if not kind:
+        raise HTTPException(400, "File is not a recognized image (PNG, JPG, GIF, WEBP).")
+    # Re-derive extension from real type so spoofed extensions can't change it.
+    canonical_ext = ".jpg" if kind == "jpg" else f".{kind}"
+    ext = canonical_ext
+    import secrets
+    name = f"{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(8)}{ext}"
+    target_dir = _UPLOADS_DIR / safe_folder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / name
+    target.write_bytes(data)
+    return {"url": f"/uploads/{safe_folder}/{name}", "size": len(data)}
+
+
 # ---------- Codes Upload (streaming + batched insert) ----------
 @app.post("/api/codes/upload")
 async def upload_codes(
@@ -1039,6 +1091,8 @@ def api_root():
 # `npm run build` which writes static assets into `frontend/dist`. When that
 # directory exists we mount it and add a catch-all so client-side routes
 # (/login, /brands, /verify/<slug>, ...) all return index.html.
+app.mount("/uploads", StaticFiles(directory=_UPLOADS_DIR), name="uploads")
+
 _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if _FRONTEND_DIST.is_dir():
     _INDEX_HTML = _FRONTEND_DIST / "index.html"
@@ -1054,8 +1108,8 @@ if _FRONTEND_DIST.is_dir():
 
     @app.get("/{full_path:path}")
     def _spa_catch_all(full_path: str):
-        # Never hijack API routes — let FastAPI return its own 404 for them.
-        if full_path.startswith("api/"):
+        # Never hijack API or uploads routes — let FastAPI return its own 404 for them.
+        if full_path.startswith("api/") or full_path.startswith("uploads/"):
             raise HTTPException(status_code=404, detail="Not Found")
         # Serve a real file from dist if one exists (favicon.svg, vite.svg, ...).
         candidate = _FRONTEND_DIST / full_path

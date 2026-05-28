@@ -37,3 +37,4 @@ Thumbs.db
 *.log
 npm-debug.log*
 pip-log.txt
+uploads/

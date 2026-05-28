@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, apiBase } from "../api";
+import { api, apiBase, assetUrl } from "../api";
 import Topbar from "../components/Topbar";
 import { useToast } from "../components/Toast";
 import { fmtIST } from "../utils/time";
@@ -141,7 +141,7 @@ export default function Upload() {
                     borderRadius: 8, display: "flex", alignItems: "center", gap: 12,
                   }}>
                     {selectedBrand.desktop_image
-                      ? <img src={selectedBrand.desktop_image} className="brand-thumb" alt="" />
+                      ? <img src={assetUrl(selectedBrand.desktop_image)} className="brand-thumb" alt="" />
                       : <div className="brand-thumb" style={{ background: selectedBrand.primary_color }} />}
                     <div>
                       <div style={{ fontWeight: 600 }}>{selectedBrand.name}</div>

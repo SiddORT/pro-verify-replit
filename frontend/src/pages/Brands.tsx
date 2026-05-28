@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
+import { api, assetUrl } from "../api";
 import Topbar from "../components/Topbar";
 import { useToast } from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
@@ -10,13 +10,14 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brand";
 }
 
-function fileToDataUrl(f: File): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = rej;
-    r.readAsDataURL(f);
+async function uploadImage(f: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("folder", "brands");
+  const r = await api.post("/api/uploads/image", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
   });
+  return r.data.url as string;
 }
 
 function Req() { return <span style={{ color: "#dc2626", marginLeft: 2 }}>*</span>; }
@@ -181,7 +182,7 @@ export default function Brands() {
                   <td>{i + 1}</td>
                   <td>
                     {b.desktop_image
-                      ? <img src={b.desktop_image} className="brand-thumb" alt="" />
+                      ? <img src={assetUrl(b.desktop_image)} className="brand-thumb" alt="" />
                       : <div className="brand-thumb" style={{ background: b.primary_color }} />}
                   </td>
                   <td style={{ fontWeight: 600 }}>{b.name}</td>
@@ -241,9 +242,20 @@ export default function Brands() {
 }
 
 function ImagePicker({ title, sub, value, onChange, inputRef }: any) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
   async function pick(f: File | undefined) {
     if (!f) return;
-    onChange(await fileToDataUrl(f));
+    setBusy(true);
+    try {
+      const url = await uploadImage(f);
+      onChange(url);
+    } catch (e: any) {
+      toast(e?.response?.data?.detail || "Image upload failed", "error");
+      if (inputRef.current) inputRef.current.value = "";
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 14, background: "#fafafa" }}>
@@ -251,10 +263,10 @@ function ImagePicker({ title, sub, value, onChange, inputRef }: any) {
       <div style={{ color: "#6b7280", fontSize: 12, margin: "4px 0 10px" }}>{sub}</div>
       {value
         ? <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <img src={value} style={{ height: 60, borderRadius: 6, border: "1px solid #e5e7eb" }} />
+            <img src={assetUrl(value)} style={{ height: 60, borderRadius: 6, border: "1px solid #e5e7eb" }} />
             <button type="button" className="btn-outline" onClick={() => { onChange(null); if (inputRef.current) inputRef.current.value=""; }}>Remove</button>
           </div>
-        : <button type="button" className="btn-outline" onClick={() => inputRef.current?.click()} style={{ width: "100%" }}>↑ Upload Image</button>}
+        : <button type="button" className="btn-outline" disabled={busy} onClick={() => inputRef.current?.click()} style={{ width: "100%" }}>{busy ? "Uploading..." : "↑ Upload Image"}</button>}
       <input ref={inputRef} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
     </div>
   );
