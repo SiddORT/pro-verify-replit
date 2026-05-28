@@ -21,6 +21,46 @@ async function uploadImage(f: File): Promise<string> {
   return r.data.url as string;
 }
 
+function readImageDimensions(f: File): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read image — file may be corrupted or an unsupported format"));
+    };
+    img.src = url;
+  });
+}
+
+// Accept dimensions within ±20% tolerance on each side AND aspect-ratio
+// within ±10% of recommended. Returns null if OK, or a human-readable
+// error message describing exactly what's wrong.
+function validateImageDimensions(
+  actual: { w: number; h: number },
+  recW: number,
+  recH: number,
+): string | null {
+  const dimTol = 0.2;
+  const ratioTol = 0.1;
+  const targetRatio = recW / recH;
+  const actualRatio = actual.w / actual.h;
+  const minW = Math.round(recW * (1 - dimTol));
+  const minH = Math.round(recH * (1 - dimTol));
+  if (actual.w < minW || actual.h < minH) {
+    return `Image is ${actual.w}×${actual.h}px — too small. Need at least ${minW}×${minH}px (recommended ${recW}×${recH}px).`;
+  }
+  if (Math.abs(actualRatio - targetRatio) / targetRatio > ratioTol) {
+    const orientation = targetRatio > 1 ? "landscape" : "portrait";
+    return `Image aspect ratio is ${actualRatio.toFixed(2)}:1 — does not match the recommended ${recW}×${recH} ${orientation} ratio (${targetRatio.toFixed(2)}:1).`;
+  }
+  return null;
+}
+
 function Req() { return <span style={{ color: "#dc2626", marginLeft: 2 }}>*</span>; }
 
 export default function Brands() {
@@ -147,8 +187,10 @@ export default function Brands() {
           <label className="label">Background Images <span style={{ color: "#9ca3af", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
           <div className="grid-2" style={{ marginBottom: 16 }}>
             <ImagePicker title="Desktop / Web" sub="Recommended: 1920 x 1080px (16:9)"
+              recW={1920} recH={1080}
               value={desktop} onChange={setDesktop} inputRef={dRef} />
             <ImagePicker title="Mobile" sub="Recommended: 750 x 1334px (9:16)"
+              recW={750} recH={1334}
               value={mobile} onChange={setMobile} inputRef={mRef} />
           </div>
           <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 12 }}>
@@ -242,13 +284,32 @@ export default function Brands() {
   );
 }
 
-function ImagePicker({ title, sub, value, onChange, inputRef }: any) {
+function ImagePicker({ title, sub, value, onChange, inputRef, recW, recH }: any) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   async function pick(f: File | undefined) {
     if (!f) return;
     setBusy(true);
     try {
+      // 1. Validate dimensions BEFORE uploading so we waste no bandwidth on
+      //    images that don't match the recommended size for this slot.
+      if (recW && recH) {
+        let dims: { w: number; h: number };
+        try {
+          dims = await readImageDimensions(f);
+        } catch (e: any) {
+          toast(e?.message || "Could not read image", "error");
+          if (inputRef.current) inputRef.current.value = "";
+          return;
+        }
+        const err = validateImageDimensions(dims, recW, recH);
+        if (err) {
+          console.warn("[ImagePicker] resolution rejected:", err);
+          toast(err, "error");
+          if (inputRef.current) inputRef.current.value = "";
+          return;
+        }
+      }
       console.log("[ImagePicker] uploading", { name: f.name, type: f.type, size: f.size });
       const url = await uploadImage(f);
       console.log("[ImagePicker] upload OK ->", url);
