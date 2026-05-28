@@ -59,7 +59,14 @@ app = FastAPI(title="PROverify API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r".*",
+    # Explicit allowlist for known production/custom domains, plus a regex
+    # that covers Replit dev preview (*.replit.dev), Replit deploy
+    # (*.replit.app) and localhost on any port.
+    allow_origins=[
+        "https://proverify.ortdemo.com",
+        "https://proverify.online",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://[a-z0-9.-]+\.replit\.(dev|app)$",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
