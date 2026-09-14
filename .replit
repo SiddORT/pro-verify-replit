@@ -84,3 +84,7 @@ build = ["bash", "-c", "cd frontend && npm ci && npm run build"]
 [userenv.shared]
 INITIAL_ADMIN_EMAIL = "admin@proverify.online"
 INITIAL_ADMIN_PASSWORD = "PVAdm!n#2026$Secure9k"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
