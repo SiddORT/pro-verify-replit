@@ -1,6 +1,10 @@
 import os
 import io
 import re
+import hashlib
+import hmac
+import json
+import secrets
 import datetime as dt
 from pathlib import Path
 from typing import Optional, List
@@ -15,10 +19,11 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, StrictStr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 import bcrypt
@@ -167,6 +172,26 @@ class BrandIn(BaseModel):
     desktop_image: Optional[str] = None
     mobile_image: Optional[str] = None
     is_active: Optional[bool] = True
+
+
+class ConnectionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: StrictStr
+
+
+class ConnectionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[StrictStr] = None
+
+
+class APIVerifyIn(BaseModel):
+    """The integration endpoint intentionally accepts exactly one field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: StrictStr
 
 
 # ---------- Auth ----------
@@ -324,6 +349,266 @@ def delete_brand(
     db.execute(text("DELETE FROM brands WHERE id=:i"), {"i": brand_id})
     db.commit()
     return {"ok": True}
+
+
+# ---------- Brand API connections ----------
+def _new_connection_key() -> tuple[str, str, str]:
+    """Return (clear-text key, display prefix, SHA-256 digest)."""
+    key = "pvk_" + secrets.token_urlsafe(32)
+    return key, key[:12], hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def _connection_dict(row) -> dict:
+    return {
+        "id": row[0],
+        "brand_id": row[1],
+        "brand_name": row[2] if len(row) > 2 else None,
+        "name": row[3] if len(row) > 3 else row[2],
+        "key_prefix": row[4] if len(row) > 4 else row[3],
+        "revoked_at": (
+            row[5].isoformat() if len(row) > 5 and row[5] else None
+        ),
+        "last_used_at": (
+            row[6].isoformat() if len(row) > 6 and row[6] else None
+        ),
+        "created_at": (
+            row[7].isoformat() if len(row) > 7 and row[7] else None
+        ),
+        "updated_at": (
+            row[8].isoformat() if len(row) > 8 and row[8] else None
+        ),
+        "rotated_at": (
+            row[9].isoformat() if len(row) > 9 and row[9] else None
+        ),
+        "is_active": not (len(row) > 5 and row[5]),
+    }
+
+
+def _connection_query(db: Session, connection_id: int, brand_id: int):
+    return db.execute(
+        text(
+            """SELECT c.id, c.brand_id, b.name, c.name, c.key_prefix,
+                      c.revoked_at, c.last_used_at, c.created_at, c.updated_at,
+                      c.rotated_at
+               FROM brand_connections c JOIN brands b ON b.id=c.brand_id
+              WHERE c.id=:i AND c.brand_id=:b"""
+        ),
+        {"i": connection_id, "b": brand_id},
+    ).first()
+
+
+_CONNECTION_ADMIN_PATHS = [
+    "/api/brands/{brand_id}/connections",
+    "/api/admin/brands/{brand_id}/connections",
+    "/api/v1/admin/brands/{brand_id}/connections",
+]
+
+
+@app.get(_CONNECTION_ADMIN_PATHS[0])
+@app.get(_CONNECTION_ADMIN_PATHS[1])
+@app.get(_CONNECTION_ADMIN_PATHS[2])
+def list_brand_connections(
+    brand_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    brand = db.execute(
+        text("SELECT id FROM brands WHERE id=:i"), {"i": brand_id}
+    ).first()
+    if not brand:
+        raise HTTPException(404, "Brand not found")
+    rows = db.execute(
+        text(
+            """SELECT c.id, c.brand_id, b.name, c.name, c.key_prefix,
+                      c.revoked_at, c.last_used_at, c.created_at, c.updated_at,
+                      c.rotated_at
+               FROM brand_connections c JOIN brands b ON b.id=c.brand_id
+              WHERE c.brand_id=:b ORDER BY c.created_at DESC, c.id DESC"""
+        ),
+        {"b": brand_id},
+    ).all()
+    return {"items": [_connection_dict(row) for row in rows]}
+
+
+@app.post(_CONNECTION_ADMIN_PATHS[0])
+@app.post(_CONNECTION_ADMIN_PATHS[1])
+@app.post(_CONNECTION_ADMIN_PATHS[2])
+def create_brand_connection(
+    brand_id: int,
+    data: ConnectionIn,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    name = data.name.strip()
+    if not name or len(name) > 255:
+        raise HTTPException(400, "Connection name must not be empty")
+    if not db.execute(
+        text("SELECT 1 FROM brands WHERE id=:i"), {"i": brand_id}
+    ).first():
+        raise HTTPException(404, "Brand not found")
+    key, prefix, digest = _new_connection_key()
+    row = db.execute(
+        text(
+            """INSERT INTO brand_connections
+                 (brand_id, name, key_prefix, key_hash)
+               VALUES (:b,:n,:p,:h) RETURNING id"""
+        ),
+        {"b": brand_id, "n": name, "p": prefix, "h": digest},
+    ).first()
+    db.commit()
+    result = _connection_dict(_connection_query(db, row[0], brand_id))
+    # The clear-text credential is deliberately present only on this response.
+    result["api_key"] = key
+    result["key"] = key
+    return result
+
+
+_CONNECTION_ITEM_PATHS = [
+    "/api/brands/{brand_id}/connections/{connection_id}",
+    "/api/admin/brands/{brand_id}/connections/{connection_id}",
+    "/api/v1/admin/brands/{brand_id}/connections/{connection_id}",
+]
+
+
+@app.get(_CONNECTION_ITEM_PATHS[0])
+@app.get(_CONNECTION_ITEM_PATHS[1])
+@app.get(_CONNECTION_ITEM_PATHS[2])
+def get_brand_connection(
+    brand_id: int,
+    connection_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    row = _connection_query(db, connection_id, brand_id)
+    if not row:
+        raise HTTPException(404, "Connection not found")
+    return _connection_dict(row)
+
+
+@app.patch(_CONNECTION_ITEM_PATHS[0])
+@app.patch(_CONNECTION_ITEM_PATHS[1])
+@app.patch(_CONNECTION_ITEM_PATHS[2])
+@app.put(_CONNECTION_ITEM_PATHS[0])
+@app.put(_CONNECTION_ITEM_PATHS[1])
+@app.put(_CONNECTION_ITEM_PATHS[2])
+def update_brand_connection(
+    brand_id: int,
+    connection_id: int,
+    data: ConnectionUpdate,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    row = _connection_query(db, connection_id, brand_id)
+    if not row:
+        raise HTTPException(404, "Connection not found")
+    if data.name is not None:
+        name = data.name.strip()
+        if not name or len(name) > 255:
+            raise HTTPException(400, "Connection name must not be empty")
+        db.execute(
+            text(
+                "UPDATE brand_connections SET name=:n, updated_at=NOW() "
+                "WHERE id=:i AND brand_id=:b"
+            ),
+            {"n": name, "i": connection_id, "b": brand_id},
+        )
+        db.commit()
+    return _connection_dict(_connection_query(db, connection_id, brand_id))
+
+
+def _rotate_connection(
+    brand_id: int, connection_id: int, db: Session
+) -> dict:
+    row = _connection_query(db, connection_id, brand_id)
+    if not row:
+        raise HTTPException(404, "Connection not found")
+    if row[5]:
+        raise HTTPException(400, "Connection has been revoked")
+    key, prefix, digest = _new_connection_key()
+    db.execute(
+        text(
+            """UPDATE brand_connections
+                  SET key_prefix=:p, key_hash=:h, updated_at=NOW(),
+                      rotated_at=NOW()
+                WHERE id=:i AND brand_id=:b"""
+        ),
+        {"p": prefix, "h": digest, "i": connection_id, "b": brand_id},
+    )
+    db.commit()
+    result = _connection_dict(_connection_query(db, connection_id, brand_id))
+    result["api_key"] = key
+    result["key"] = key
+    return result
+
+
+_ROTATE_PATHS = [
+    "/api/brands/{brand_id}/connections/{connection_id}/rotate",
+    "/api/admin/brands/{brand_id}/connections/{connection_id}/rotate",
+    "/api/v1/admin/brands/{brand_id}/connections/{connection_id}/rotate",
+]
+
+
+@app.post(_ROTATE_PATHS[0])
+@app.post(_ROTATE_PATHS[1])
+@app.post(_ROTATE_PATHS[2])
+def rotate_brand_connection(
+    brand_id: int,
+    connection_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    return _rotate_connection(brand_id, connection_id, db)
+
+
+def _revoke_connection(brand_id: int, connection_id: int, db: Session) -> dict:
+    row = _connection_query(db, connection_id, brand_id)
+    if not row:
+        raise HTTPException(404, "Connection not found")
+    db.execute(
+        text(
+            "UPDATE brand_connections SET revoked_at=COALESCE(revoked_at,NOW()), "
+            "updated_at=NOW() WHERE id=:i AND brand_id=:b"
+        ),
+        {"i": connection_id, "b": brand_id},
+    )
+    db.commit()
+    return _connection_dict(_connection_query(db, connection_id, brand_id))
+
+
+_REVOKE_PATHS = [
+    "/api/brands/{brand_id}/connections/{connection_id}/revoke",
+    "/api/admin/brands/{brand_id}/connections/{connection_id}/revoke",
+    "/api/v1/admin/brands/{brand_id}/connections/{connection_id}/revoke",
+]
+
+
+@app.post(_REVOKE_PATHS[0])
+@app.post(_REVOKE_PATHS[1])
+@app.post(_REVOKE_PATHS[2])
+@app.delete(_REVOKE_PATHS[0])
+@app.delete(_REVOKE_PATHS[1])
+@app.delete(_REVOKE_PATHS[2])
+def revoke_brand_connection(
+    brand_id: int,
+    connection_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    return _revoke_connection(brand_id, connection_id, db)
+
+
+@app.delete(_CONNECTION_ITEM_PATHS[0])
+@app.delete(_CONNECTION_ITEM_PATHS[1])
+@app.delete(_CONNECTION_ITEM_PATHS[2])
+def delete_brand_connection(
+    brand_id: int,
+    connection_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    # DELETE is intentionally a revoke rather than a hard delete so audit
+    # attribution and historical records remain meaningful.
+    return _revoke_connection(brand_id, connection_id, db)
 
 
 # ---------- Image Upload (saved to disk, returns public path) ----------
@@ -1006,25 +1291,18 @@ def _rate_limit(ip: Optional[str], max_per_minute: int = 30) -> bool:
     return True
 
 
-@app.post("/api/public/verify")
-def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db)):
-    code = (data.code or "").strip()
-    slug = (data.slug or "").strip()
+def _verify_brand_code(
+    code: str,
+    brand,
+    request: Request,
+    db: Session,
+    connection_id: Optional[int] = None,
+):
+    """Apply the canonical first/repeat/invalid verification semantics."""
     if not code or len(code) > 255:
         raise HTTPException(400, "Invalid code")
-    if not slug or len(slug) > 255:
-        raise HTTPException(400, "Invalid slug")
     ip = request.client.host if request.client else None
-    if not _rate_limit(ip):
-        raise HTTPException(429, "Too many requests, please slow down")
     ua = request.headers.get("user-agent")
-
-    brand = db.execute(
-        text("SELECT id, name FROM brands WHERE slug=:s AND is_active=TRUE"),
-        {"s": slug},
-    ).first()
-    if not brand:
-        raise HTTPException(404, "Brand not found")
 
     # Lock the product_code row so concurrent verifies for the same code
     # serialize, preventing two requests from both being classified as "first".
@@ -1034,11 +1312,19 @@ def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db))
     ).first()
     if not pc:
         db.execute(
-            text("""INSERT INTO verification_logs (code, brand_id, ip_address, user_agent, is_valid)
-                    VALUES (:c,:b,:ip,:ua,FALSE)"""),
-            {"c": code, "b": brand[0], "ip": ip, "ua": ua},
+            text(
+                """INSERT INTO verification_logs
+                    (code, brand_id, connection_id, ip_address, user_agent, is_valid)
+                    VALUES (:c,:b,:connection_id,:ip,:ua,FALSE)"""
+            ),
+            {
+                "c": code,
+                "b": brand[0],
+                "connection_id": connection_id,
+                "ip": ip,
+                "ua": ua,
+            },
         )
-        db.commit()
         return {"status": "invalid", "brand": brand[1]}
 
     prior = db.execute(
@@ -1049,11 +1335,19 @@ def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db))
     ).all()
     now = dt.datetime.utcnow()
     db.execute(
-        text("""INSERT INTO verification_logs (code, brand_id, ip_address, user_agent, is_valid)
-                VALUES (:c,:b,:ip,:ua,TRUE)"""),
-        {"c": code, "b": brand[0], "ip": ip, "ua": ua},
+        text(
+            """INSERT INTO verification_logs
+                (code, brand_id, connection_id, ip_address, user_agent, is_valid)
+                VALUES (:c,:b,:connection_id,:ip,:ua,TRUE)"""
+        ),
+        {
+            "c": code,
+            "b": brand[0],
+            "connection_id": connection_id,
+            "ip": ip,
+            "ua": ua,
+        },
     )
-    db.commit()
     if not prior:
         return {
             "status": "first",
@@ -1070,6 +1364,199 @@ def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db))
         "current_scan_at": now.isoformat(),
         "history": [r[0].isoformat() for r in prior],
     }
+
+
+@app.post("/api/public/verify")
+def verify_code(data: VerifyIn, request: Request, db: Session = Depends(get_db)):
+    code = (data.code or "").strip()
+    slug = (data.slug or "").strip()
+    if not code or len(code) > 255:
+        raise HTTPException(400, "Invalid code")
+    if not slug or len(slug) > 255:
+        raise HTTPException(400, "Invalid slug")
+    ip = request.client.host if request.client else None
+    if not _rate_limit(ip):
+        raise HTTPException(429, "Too many requests, please slow down")
+    brand = db.execute(
+        text("SELECT id, name FROM brands WHERE slug=:s AND is_active=TRUE"),
+        {"s": slug},
+    ).first()
+    if not brand:
+        raise HTTPException(404, "Brand not found")
+    result = _verify_brand_code(code, brand, request, db)
+    db.commit()
+    return result
+
+
+def _authenticate_brand_connection(
+    slug: str, api_key: Optional[str], db: Session
+):
+    """Authenticate without revealing whether a brand or key exists."""
+    if not api_key or len(api_key) > 512:
+        return None
+    digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    rows = db.execute(
+        text(
+            """SELECT c.id, c.brand_id, c.key_hash, b.id, b.name, c.key_prefix
+                 FROM brand_connections c JOIN brands b ON b.id=c.brand_id
+                WHERE b.slug=:s AND b.is_active=TRUE AND c.revoked_at IS NULL"""
+        ),
+        {"s": slug},
+    ).all()
+    # A brand may have many live connections.  Check every candidate rather
+    # than relying on ``first()``; compare_digest remains constant-time for
+    # each candidate hash and no key material is ever returned.
+    for row in rows:
+        if hmac.compare_digest(digest, row[2]):
+            return {
+                "id": row[0],
+                "brand_id": row[1],
+                "brand": (row[3], row[4]),
+                "key_prefix": row[5],
+            }
+    return None
+
+
+def _brand_api_connection(
+    slug: str, request: Request, db: Session = Depends(get_db)
+):
+    """Dependency that authenticates before request-body validation is used."""
+    connection = _authenticate_brand_connection(
+        slug.strip(), request.headers.get("x-api-key"), db
+    )
+    if not connection:
+        # Do not distinguish missing, malformed, unknown, revoked, or inactive
+        # credentials (including when the request body is malformed).
+        raise HTTPException(401, "Invalid API key")
+    return connection
+
+
+@app.exception_handler(RequestValidationError)
+async def audit_brand_api_validation_error(
+    request: Request, exc: RequestValidationError
+):
+    """Audit authenticated integration requests rejected before route entry."""
+    match = re.fullmatch(r"/api/v1/brands/([^/]+)/verify", request.url.path)
+    if match:
+        db = SessionLocal()
+        try:
+            connection = _authenticate_brand_connection(
+                match.group(1), request.headers.get("x-api-key"), db
+            )
+            if connection:
+                submitted_code = None
+                try:
+                    body = await request.json()
+                    candidate = body.get("code") if isinstance(body, dict) else None
+                    if isinstance(candidate, str) and len(candidate) <= 255:
+                        submitted_code = candidate.strip()
+                except Exception:
+                    pass
+                _record_api_call(
+                    db,
+                    connection,
+                    request,
+                    422,
+                    {"result": "error", "code": submitted_code},
+                )
+                db.commit()
+        finally:
+            db.close()
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+def _record_api_call(
+    db: Session,
+    connection: dict,
+    request: Request,
+    status_code: int,
+    metadata: Optional[dict] = None,
+) -> None:
+    """Persist request attribution without ever persisting the API key."""
+    ip = request.client.host if request.client else None
+    db.execute(
+        text(
+            """INSERT INTO api_call_logs
+                (brand_id, connection_id, method, path, status_code,
+                 submitted_code, result, key_prefix, ip_address, user_agent, metadata)
+                VALUES (:brand_id,:connection_id,:method,:path,:status_code,
+                        :submitted_code,:result,:key_prefix,:ip,:ua,CAST(:metadata AS JSONB))"""
+        ),
+        {
+            "brand_id": connection["brand_id"],
+            "connection_id": connection["id"],
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": status_code,
+            "submitted_code": (metadata or {}).get("code"),
+            "result": (metadata or {}).get("result"),
+            "key_prefix": connection["key_prefix"],
+            "ip": ip,
+            "ua": request.headers.get("user-agent"),
+            "metadata": json.dumps(metadata or {}),
+        },
+    )
+    db.execute(
+        text("UPDATE brand_connections SET last_used_at=NOW() WHERE id=:i"),
+        {"i": connection["id"]},
+    )
+
+
+@app.post("/api/v1/brands/{slug}/verify")
+def verify_brand_api(
+    slug: str,
+    data: APIVerifyIn,
+    request: Request,
+    connection: dict = Depends(_brand_api_connection),
+    db: Session = Depends(get_db),
+):
+    # Missing, malformed, unknown, and revoked credentials intentionally all
+    # have the same response.  This avoids turning this endpoint into a brand
+    # or credential enumeration oracle.
+    ip = request.client.host if request.client else None
+    if not _rate_limit(ip):
+        _record_api_call(
+            db,
+            connection,
+            request,
+            429,
+            {"result": "rate_limited"},
+        )
+        db.commit()
+        raise HTTPException(429, "Too many requests, please slow down")
+
+    code = data.code.strip()
+    try:
+        result = _verify_brand_code(
+            code,
+            connection["brand"],
+            request,
+            db,
+            connection_id=connection["id"],
+        )
+    except HTTPException as exc:
+        _record_api_call(
+            db,
+            connection,
+            request,
+            exc.status_code,
+            {"result": "error", "code_length": len(code)},
+        )
+        db.commit()
+        raise
+    _record_api_call(
+        db,
+        connection,
+        request,
+        200,
+        {
+            "result": result.get("status"),
+            "code": code,
+            "code_length": len(code),
+        },
+    )
+    db.commit()
+    return result
 
 
 @app.get("/api/activity")
@@ -1090,8 +1577,10 @@ def activity(
     elif valid == "false":
         where.append("v.is_valid=FALSE")
     rows = db.execute(
-        text(f"""SELECT v.id, v.code, v.is_valid, v.created_at, v.ip_address, br.name
+        text(f"""SELECT v.id, v.code, v.is_valid, v.created_at, v.ip_address,
+                        br.name, v.connection_id, c.name
                  FROM verification_logs v LEFT JOIN brands br ON br.id=v.brand_id
+                 LEFT JOIN brand_connections c ON c.id=v.connection_id
                  WHERE {" AND ".join(where)}
                  ORDER BY v.id DESC LIMIT :l"""),
         params,
@@ -1104,9 +1593,215 @@ def activity(
             "created_at": r[3].isoformat() if r[3] else None,
             "ip": r[4],
             "brand": r[5],
+            "connection_id": r[6],
+            "connection_name": r[7],
+            "source": "connection" if r[6] is not None else "public",
         }
         for r in rows
     ]
+
+
+def _api_call_log_item(row) -> dict:
+    return {
+        "id": row[0],
+        "brand_id": row[1],
+        "brand_name": row[2],
+        "connection_id": row[3],
+        "connection_name": row[4],
+        "method": row[5],
+        "path": row[6],
+        "status_code": row[7],
+        "submitted_code": row[8],
+        "code": row[8],
+        "result": row[9],
+        "connection_key_prefix": row[10],
+        "key_prefix": row[10],
+        "ip": row[11],
+        "ip_address": row[11],
+        "user_agent": row[12],
+        "metadata": row[13] or {},
+        "created_at": row[14].isoformat() if row[14] else None,
+    }
+
+
+def _list_api_call_logs(
+    db: Session,
+    brand_id: Optional[int] = None,
+    connection_id: Optional[int] = None,
+    status_code: Optional[int] = None,
+    success: Optional[bool] = None,
+    search: Optional[str] = None,
+    connection: Optional[int] = None,
+    code: Optional[str] = None,
+    code_exact: bool = False,
+    result: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    limit = min(max(limit, 1), 500)
+    offset = max(offset, 0)
+    where = ["1=1"]
+    params: dict = {}
+    if brand_id is not None:
+        where.append("l.brand_id=:brand_id")
+        params["brand_id"] = brand_id
+    if connection_id is not None:
+        where.append("l.connection_id=:connection_id")
+        params["connection_id"] = connection_id
+    if connection is not None:
+        where.append("l.connection_id=:connection")
+        params["connection"] = connection
+    if status_code is not None:
+        where.append("l.status_code=:status_code")
+        params["status_code"] = status_code
+    if success is True:
+        where.append("l.status_code >= 200 AND l.status_code < 300")
+    elif success is False:
+        where.append("(l.status_code < 200 OR l.status_code >= 300)")
+    if search:
+        where.append(
+            "(l.path ILIKE :search OR l.ip_address ILIKE :search "
+            "OR l.user_agent ILIKE :search OR CAST(l.metadata AS TEXT) ILIKE :search)"
+        )
+        params["search"] = f"%{search}%"
+    if code:
+        if code_exact:
+            where.append("l.submitted_code=:submitted_code")
+            params["submitted_code"] = code
+        else:
+            where.append("l.submitted_code ILIKE :submitted_code")
+            params["submitted_code"] = f"%{code}%"
+    if result:
+        normalized_result = result.strip().lower()
+        if normalized_result not in {
+            "first", "repeat", "invalid", "error", "rate_limited"
+        }:
+            raise HTTPException(400, "Invalid result filter")
+        where.append("l.result=:result")
+        params["result"] = normalized_result
+    if date_from:
+        where.append("l.created_at >= CAST(:date_from AS TIMESTAMP)")
+        params["date_from"] = date_from
+    if date_to:
+        # date_to is inclusive for callers supplying a calendar date.
+        where.append(
+            "l.created_at < CAST(:date_to AS TIMESTAMP) + INTERVAL '1 day'"
+        )
+        params["date_to"] = date_to
+    w = " AND ".join(where)
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM api_call_logs l WHERE {w}"), params
+    ).scalar() or 0
+    params["limit"] = limit
+    params["offset"] = offset
+    rows = db.execute(
+        text(
+            f"""SELECT l.id, l.brand_id, b.name, l.connection_id, c.name,
+                       l.method, l.path, l.status_code, l.submitted_code,
+                       l.result, l.key_prefix, l.ip_address, l.user_agent,
+                       l.metadata, l.created_at
+                  FROM api_call_logs l
+             LEFT JOIN brands b ON b.id=l.brand_id
+             LEFT JOIN brand_connections c ON c.id=l.connection_id
+                 WHERE {w}
+              ORDER BY l.created_at DESC, l.id DESC
+                 LIMIT :limit OFFSET :offset"""
+        ),
+        params,
+    ).all()
+    return {
+        "total": int(total),
+        "limit": limit,
+        "offset": offset,
+        "items": [_api_call_log_item(row) for row in rows],
+    }
+
+
+@app.get("/api/api-call-logs")
+@app.get("/api/admin/api-call-logs")
+@app.get("/api/v1/admin/api-call-logs")
+def list_api_call_logs(
+    brand_id: Optional[int] = None,
+    connection_id: Optional[int] = None,
+    status_code: Optional[int] = None,
+    success: Optional[bool] = None,
+    search: Optional[str] = None,
+    connection: Optional[int] = None,
+    code: Optional[str] = None,
+    code_exact: bool = False,
+    result: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    return _list_api_call_logs(
+        db,
+        brand_id,
+        connection_id,
+        status_code,
+        success,
+        search,
+        connection,
+        code,
+        code_exact,
+        result,
+        date_from,
+        date_to,
+        limit,
+        offset,
+    )
+
+
+_CONNECTION_LOG_PATHS = [
+    "/api/brands/{brand_id}/connections/{connection_id}/logs",
+    "/api/admin/brands/{brand_id}/connections/{connection_id}/logs",
+    "/api/v1/admin/brands/{brand_id}/connections/{connection_id}/logs",
+]
+
+
+@app.get(_CONNECTION_LOG_PATHS[0])
+@app.get(_CONNECTION_LOG_PATHS[1])
+@app.get(_CONNECTION_LOG_PATHS[2])
+def list_connection_api_logs(
+    brand_id: int,
+    connection_id: int,
+    status_code: Optional[int] = None,
+    success: Optional[bool] = None,
+    search: Optional[str] = None,
+    connection: Optional[int] = None,
+    code: Optional[str] = None,
+    code_exact: bool = False,
+    result: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    admin=Depends(current_admin),
+):
+    if not _connection_query(db, connection_id, brand_id):
+        raise HTTPException(404, "Connection not found")
+    return _list_api_call_logs(
+        db,
+        brand_id,
+        connection_id,
+        status_code,
+        success,
+        search,
+        connection,
+        code,
+        code_exact,
+        result,
+        date_from,
+        date_to,
+        limit,
+        offset,
+    )
 
 
 @app.post("/api/admin/reset-data")
@@ -1124,7 +1819,8 @@ def reset_data(
         raise HTTPException(400, "Missing or invalid confirmation token")
     db.execute(
         text(
-            "TRUNCATE TABLE verification_logs, product_codes, upload_batches, brands "
+            "TRUNCATE TABLE api_call_logs, brand_connections, verification_logs, "
+            "product_codes, upload_batches, brands "
             "RESTART IDENTITY CASCADE"
         )
     )
@@ -1136,6 +1832,8 @@ def reset_data(
         "product_codes",
         "upload_batches",
         "verification_logs",
+        "brand_connections",
+        "api_call_logs",
     ):
         counts[tbl] = db.execute(text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
     return {"ok": True, "wiped_by": admin["email"], "row_counts": counts}

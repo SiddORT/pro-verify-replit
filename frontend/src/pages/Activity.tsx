@@ -4,7 +4,16 @@ import { api } from "../api";
 import Topbar from "../components/Topbar";
 import { fmtIST } from "../utils/time";
 
-type Row = { id: number; code: string; is_valid: boolean; created_at: string; ip: string | null; brand: string | null };
+type Row = {
+  id: number;
+  code: string;
+  is_valid: boolean;
+  created_at: string;
+  ip: string | null;
+  brand: string | null;
+  source?: "public" | "connection";
+  connection_name?: string | null;
+};
 type Brand = { id: number; name: string };
 
 export default function Activity() {
@@ -70,7 +79,7 @@ export default function Activity() {
             <thead>
               <tr>
                 <th>#</th><th>DATE / TIME</th><th>BRAND</th><th>CODE</th>
-                <th>STATUS</th><th>IP</th>
+                <th>STATUS</th><th>SOURCE</th><th>IP</th>
               </tr>
             </thead>
             <tbody>
@@ -85,11 +94,16 @@ export default function Activity() {
                       ? <span className="badge-active">Valid</span>
                       : <span style={{ background: "#fee2e2", color: "#dc2626", padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>Invalid</span>}
                   </td>
+                  <td>
+                    {r.source === "connection"
+                      ? <span title={r.connection_name || undefined}>API · {r.connection_name || "Connection"}</span>
+                      : "Public scan"}
+                  </td>
                   <td style={{ color: "#6b7280", fontSize: 12 }}>{r.ip || "—"}</td>
                 </tr>
               ))}
               {!rows.length && (
-                <tr><td colSpan={6} style={{ textAlign: "center", color: "#9ca3af", padding: 32 }}>
+                <tr><td colSpan={7} style={{ textAlign: "center", color: "#9ca3af", padding: 32 }}>
                   {loading ? "Loading…" : "No verification activity yet"}
                 </td></tr>
               )}

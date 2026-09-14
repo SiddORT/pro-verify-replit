@@ -26,6 +26,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -65,11 +66,13 @@ class Brand(Base):
     updated_at: Mapped[Optional[dt.datetime]] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
-
     batches: Mapped[list["UploadBatch"]] = relationship(
         back_populates="brand", cascade="all, delete-orphan"
     )
     codes: Mapped[list["ProductCode"]] = relationship(
+        back_populates="brand", cascade="all, delete-orphan"
+    )
+    connections: Mapped[list["BrandConnection"]] = relationship(
         back_populates="brand", cascade="all, delete-orphan"
     )
 
@@ -133,6 +136,12 @@ class VerificationLog(Base):
         nullable=True,
         index=True,
     )
+    connection_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("brand_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     ip_address: Mapped[Optional[str]] = mapped_column(String)
     user_agent: Mapped[Optional[str]] = mapped_column(Text)
     is_valid: Mapped[Optional[bool]] = mapped_column(Boolean, server_default="false")
@@ -141,3 +150,80 @@ class VerificationLog(Base):
     )
 
     brand: Mapped[Optional["Brand"]] = relationship()
+    connection: Mapped[Optional["BrandConnection"]] = relationship()
+
+
+class BrandConnection(Base):
+    """A credential issued to a brand integration.
+
+    Only the one-way hash is persisted.  The clear-text key is returned once
+    from the create/rotate endpoints and cannot be recovered afterwards.
+    """
+
+    __tablename__ = "brand_connections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brand_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("brands.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(24), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    revoked_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
+    last_used_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
+    created_at: Mapped[Optional[dt.datetime]] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[Optional[dt.datetime]] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+    rotated_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
+
+    brand: Mapped["Brand"] = relationship(back_populates="connections")
+    api_call_logs: Mapped[list["ApiCallLog"]] = relationship(
+        back_populates="connection", cascade="all, delete-orphan"
+    )
+
+
+class ApiCallLog(Base):
+    """Audit record for an authenticated brand API request."""
+
+    __tablename__ = "api_call_logs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    brand_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("brands.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    connection_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("brand_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    method: Mapped[str] = mapped_column(String(16), nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    submitted_code: Mapped[Optional[str]] = mapped_column(String)
+    result: Mapped[Optional[str]] = mapped_column(String(32))
+    key_prefix: Mapped[Optional[str]] = mapped_column(String(24))
+    ip_address: Mapped[Optional[str]] = mapped_column(String)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    # ``metadata`` is a reserved SQLAlchemy declarative attribute, therefore
+    # expose it as request_metadata while retaining the conventional DB name.
+    request_metadata: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+    created_at: Mapped[Optional[dt.datetime]] = mapped_column(
+        DateTime, server_default=func.now(), index=True
+    )
+
+    brand: Mapped[Optional["Brand"]] = relationship()
+    connection: Mapped[Optional["BrandConnection"]] = relationship(
+        back_populates="api_call_logs"
+    )

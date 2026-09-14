@@ -290,6 +290,19 @@ export default function Brands() {
                         </svg>
                       </a>
                       <button className="btn-icon" title="Edit" onClick={() => edit(b)}>✎</button>
+                      <Link
+                        className="btn-icon"
+                        title="Manage API connections"
+                        aria-label="Manage API connections"
+                        to={`/brands/${b.id}/connections`}
+                        style={{ display: "inline-flex", alignItems: "center", padding: 4, color: "#1b5e20" }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="7.5" cy="15.5" r="3.5"/>
+                          <path d="m10 13 7-7a2.12 2.12 0 0 1 3 3l-7 7"/>
+                          <path d="m15 8 2 2"/>
+                        </svg>
+                      </Link>
                       <button className="btn-icon" title="Delete" style={{ color: "#dc2626" }} onClick={() => setToDelete(b)}>🗑</button>
                     </div>
                   </td>
