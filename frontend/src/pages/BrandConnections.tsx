@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
 import ConfirmModal from "../components/ConfirmModal";
@@ -45,10 +45,14 @@ function displayDate(value?: string | null): string {
 
 export default function BrandConnections() {
   const { brandId } = useParams<{ brandId: string }>();
+  const navigate = useNavigate();
   const toast = useToast();
   const [brand, setBrand] = useState<any | null>(null);
+  const [brands, setBrands] = useState<any[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [name, setName] = useState("");
+  const [createBrandId, setCreateBrandId] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -66,6 +70,7 @@ export default function BrandConnections() {
         api.get(`/api/brands/${brandId}/connections`),
       ]);
       const brands = listFrom(brandsResponse.data);
+      setBrands(brands);
       setBrand(brands.find((item: any) => String(item.id) === String(brandId)) || null);
       setConnections(listFrom(connectionsResponse.data));
     } catch (e: any) {
@@ -77,6 +82,12 @@ export default function BrandConnections() {
 
   useEffect(() => { load(); }, [brandId]);
 
+  function openCreate() {
+    setName("");
+    setCreateBrandId(brandId || "");
+    setShowCreate(true);
+  }
+
   async function createConnection(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -86,7 +97,11 @@ export default function BrandConnections() {
     }
     setSaving(true);
     try {
-      const response = await api.post(`/api/brands/${brandId}/connections`, { name: trimmed });
+      if (!createBrandId) {
+        toast("Select a brand", "error");
+        return;
+      }
+      const response = await api.post(`/api/brands/${createBrandId}/connections`, { name: trimmed });
       const key = getNewKey(response.data);
       if (!key) {
         toast("Connection created, but the API key was not returned", "error");
@@ -95,8 +110,13 @@ export default function BrandConnections() {
         setNewKeyFor(trimmed);
       }
       setName("");
+      setShowCreate(false);
       toast("Connection created");
-      await load();
+      if (String(createBrandId) !== String(brandId)) {
+        navigate(`/brands/${createBrandId}/connections`);
+      } else {
+        await load();
+      }
     } catch (e: any) {
       toast(errorMessage(e, "Could not create connection"), "error");
     } finally {
@@ -152,6 +172,7 @@ export default function BrandConnections() {
             <h1 className="page-title">API connections</h1>
             <p className="page-sub">Manage named API keys for {currentBrandName}</p>
           </div>
+          <button className="btn" onClick={openCreate}>Create connection</button>
         </div>
 
         {error && (
@@ -162,24 +183,18 @@ export default function BrandConnections() {
         )}
 
         <div className="card" style={{ marginBottom: 18 }}>
-          <h2 style={{ fontSize: 16, margin: "0 0 6px" }}>Create a connection</h2>
-          <p style={{ color: "#6b7280", fontSize: 13, margin: "0 0 16px" }}>
-            Give each integration its own key so you can identify and revoke access independently.
-          </p>
-          <form onSubmit={createConnection} className="row" style={{ alignItems: "flex-end" }}>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <label className="label" htmlFor="connection-name">Connection name</label>
-              <input
-                id="connection-name"
-                className="input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Production storefront"
-                maxLength={100}
-              />
-            </div>
-            <button className="btn" type="submit" disabled={saving || loading}>{saving ? "Creating…" : "Create API key"}</button>
-          </form>
+          <div style={{ maxWidth: 320 }}>
+            <label className="label" htmlFor="brand-filter">Brand</label>
+            <select
+              id="brand-filter"
+              className="select"
+              value={brandId || ""}
+              onChange={(e) => navigate(`/brands/${e.target.value}/connections`)}
+              disabled={loading}
+            >
+              {brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </div>
         </div>
 
         {newKey && (
@@ -329,6 +344,47 @@ X-API-Key: pv_your_connection_key`}</pre>
         onConfirm={performAction}
         onCancel={() => setConfirm(null)}
       />
+      {showCreate && (
+        <div
+          onClick={() => !saving && setShowCreate(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 16 }}
+        >
+          <form
+            onSubmit={createConnection}
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 10, padding: 24, width: "min(460px, 100%)", boxShadow: "0 10px 30px rgba(0,0,0,0.2)" }}
+          >
+            <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>Create connection</h2>
+            <p style={{ color: "#6b7280", fontSize: 13, lineHeight: 1.5, margin: "0 0 20px" }}>
+              Give each integration its own API key so access can be tracked and revoked independently.
+            </p>
+            <div style={{ marginBottom: 16 }}>
+              <label className="label" htmlFor="create-brand">Brand</label>
+              <select id="create-brand" className="select" value={createBrandId} onChange={(e) => setCreateBrandId(e.target.value)} required>
+                <option value="">Select a brand</option>
+                {brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 22 }}>
+              <label className="label" htmlFor="connection-name">Connection name</label>
+              <input
+                id="connection-name"
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Production storefront"
+                maxLength={100}
+                autoFocus
+                required
+              />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button type="button" className="btn-outline" onClick={() => setShowCreate(false)} disabled={saving}>Cancel</button>
+              <button className="btn" type="submit" disabled={saving}>{saving ? "Creating…" : "Create API key"}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }
