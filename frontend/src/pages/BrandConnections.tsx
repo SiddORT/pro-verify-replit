@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
@@ -18,25 +18,6 @@ type Connection = {
   last_used_at?: string | null;
   revoked_at?: string | null;
   expires_at?: string | null;
-};
-
-type AuditRow = {
-  id: number | string;
-  method?: string;
-  path?: string;
-  status_code?: number;
-  connection_name?: string;
-  connection_id?: number | string;
-  key_prefix?: string;
-  connection_key_prefix?: string;
-  submitted_code?: string;
-  code?: string;
-  result?: string;
-  ip_address?: string;
-  ip?: string;
-  user_agent?: string;
-  created_at?: string | null;
-  metadata?: string | Record<string, unknown> | null;
 };
 
 function listFrom(data: any): any[] {
@@ -62,17 +43,6 @@ function displayDate(value?: string | null): string {
   return value ? fmtIST(value) : "—";
 }
 
-function auditMetadata(row: AuditRow): Record<string, any> {
-  if (!row.metadata) return {};
-  if (typeof row.metadata === "object") return row.metadata;
-  try {
-    const parsed = JSON.parse(row.metadata);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 export default function BrandConnections() {
   const { brandId } = useParams<{ brandId: string }>();
   const toast = useToast();
@@ -85,17 +55,6 @@ export default function BrandConnections() {
   const [newKey, setNewKey] = useState("");
   const [newKeyFor, setNewKeyFor] = useState("");
   const [confirm, setConfirm] = useState<{ action: "rotate" | "revoke"; connection: Connection } | null>(null);
-  const [auditRows, setAuditRows] = useState<AuditRow[]>([]);
-  const [auditTotal, setAuditTotal] = useState(0);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditError, setAuditError] = useState("");
-  const [auditPage, setAuditPage] = useState(1);
-  const [auditConnection, setAuditConnection] = useState("");
-  const [auditResult, setAuditResult] = useState("");
-  const [auditCode, setAuditCode] = useState("");
-  const [auditFrom, setAuditFrom] = useState("");
-  const [auditTo, setAuditTo] = useState("");
-  const pageSize = 10;
 
   async function load() {
     if (!brandId) return;
@@ -116,41 +75,7 @@ export default function BrandConnections() {
     }
   }
 
-  async function loadAudit() {
-    if (!brandId) return;
-    setAuditLoading(true);
-    setAuditError("");
-    try {
-      const params: Record<string, string | number> = {
-        brand_id: brandId,
-        limit: pageSize,
-        offset: (auditPage - 1) * pageSize,
-      };
-      if (auditConnection) params.connection_id = auditConnection;
-      if (auditResult) params.result = auditResult;
-      if (auditCode.trim()) params.code = auditCode.trim();
-      if (auditFrom) params.date_from = auditFrom;
-      if (auditTo) params.date_to = auditTo;
-      const response = await api.get("/api/api-call-logs", { params });
-      const items = listFrom(response.data) as AuditRow[];
-      setAuditRows(items);
-      setAuditTotal(Number(response.data?.total || 0));
-    } catch (e: any) {
-      setAuditError(errorMessage(e, "Could not load the audit log."));
-    } finally {
-      setAuditLoading(false);
-    }
-  }
-
   useEffect(() => { load(); }, [brandId]);
-  useEffect(() => { loadAudit(); }, [brandId, auditPage, auditConnection, auditResult, auditCode, auditFrom, auditTo]);
-
-  const auditPages = Math.max(1, Math.ceil(auditTotal / pageSize));
-  const audit = auditRows;
-
-  useEffect(() => {
-    if (auditPage > auditPages) setAuditPage(auditPages);
-  }, [auditPage, auditPages]);
 
   async function createConnection(e: React.FormEvent) {
     e.preventDefault();
@@ -172,7 +97,6 @@ export default function BrandConnections() {
       setName("");
       toast("Connection created");
       await load();
-      await loadAudit();
     } catch (e: any) {
       toast(errorMessage(e, "Could not create connection"), "error");
     } finally {
@@ -200,7 +124,6 @@ export default function BrandConnections() {
         toast("Connection revoked");
       }
       await load();
-      await loadAudit();
     } catch (e: any) {
       toast(errorMessage(e, `Could not ${action} connection`), "error");
     } finally {
@@ -218,7 +141,6 @@ export default function BrandConnections() {
   }
 
   const currentBrandName = brand?.name || `Brand ${brandId || ""}`;
-  const visibleConnections = useMemo(() => connections, [connections]);
 
   return (
     <>
@@ -290,8 +212,8 @@ export default function BrandConnections() {
               <thead><tr><th>NAME</th><th>STATUS</th><th>KEY</th><th>CREATED</th><th>LAST USED</th><th>ROTATED</th><th>ACTIONS</th></tr></thead>
               <tbody>
                 {loading && <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#6b7280" }}>Loading connections…</td></tr>}
-                {!loading && !visibleConnections.length && <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>No API connections yet. Create one above to get started.</td></tr>}
-                {!loading && visibleConnections.map((connection) => {
+                {!loading && !connections.length && <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>No API connections yet. Create one above to get started.</td></tr>}
+                {!loading && connections.map((connection) => {
                   const status = connectionStatus(connection);
                   return (
                     <tr key={connection.id}>
@@ -302,95 +224,27 @@ export default function BrandConnections() {
                       <td>{displayDate(connection.last_used_at)}</td>
                       <td>{displayDate(connection.rotated_at || connection.updated_at)}</td>
                       <td>
-                        {status.active ? (
-                          <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+                        <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+                          <Link
+                            className="btn-outline"
+                            to={`/brands/${brandId}/connections/${connection.id}/audit`}
+                            title={`View audit log for ${connection.name}`}
+                          >
+                            Audit log
+                          </Link>
+                          {status.active ? (
+                            <>
                             <button className="btn-outline" onClick={() => setConfirm({ action: "rotate", connection })} disabled={saving}>Rotate</button>
                             <button className="btn-outline" style={{ color: "#dc2626" }} onClick={() => setConfirm({ action: "revoke", connection })} disabled={saving}>Revoke</button>
-                          </div>
-                        ) : <span style={{ color: "#9ca3af", fontSize: 12 }}>{displayDate(connection.revoked_at)}</span>}
+                            </>
+                          ) : <span style={{ color: "#9ca3af", fontSize: 12 }}>{displayDate(connection.revoked_at)}</span>}
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 18 }}>
-          <div className="page-header-row" style={{ marginBottom: 12 }}>
-            <div>
-              <h2 style={{ fontSize: 16, margin: 0 }}>Audit log</h2>
-              <p style={{ color: "#6b7280", fontSize: 13, margin: "5px 0 0" }}>Newest authenticated verification requests made with this brand's connections.</p>
-            </div>
-            <span style={{ color: "#6b7280", fontSize: 12 }}>{auditTotal} request{auditTotal === 1 ? "" : "s"}</span>
-          </div>
-          <div className="toolbar">
-            <div style={{ minWidth: 190 }}>
-              <label className="label">Connection</label>
-              <select className="select" value={auditConnection} onChange={(e) => { setAuditConnection(e.target.value); setAuditPage(1); }}>
-                <option value="">All connections</option>
-                {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name}</option>)}
-              </select>
-            </div>
-            <div style={{ minWidth: 150 }}>
-              <label className="label">Result</label>
-              <select className="select" value={auditResult} onChange={(e) => { setAuditResult(e.target.value); setAuditPage(1); }}>
-                <option value="">All results</option>
-                <option value="first">First</option>
-                <option value="repeat">Repeat</option>
-                <option value="invalid">Invalid</option>
-                <option value="error">Request error</option>
-                <option value="rate_limited">Rate limited</option>
-              </select>
-            </div>
-            <div style={{ minWidth: 160 }}>
-              <label className="label">Code</label>
-              <input className="input" placeholder="Search submitted code" value={auditCode} onChange={(e) => { setAuditCode(e.target.value); setAuditPage(1); }} />
-            </div>
-            <div style={{ minWidth: 145 }}>
-              <label className="label">From</label>
-              <input className="input" type="date" value={auditFrom} onChange={(e) => { setAuditFrom(e.target.value); setAuditPage(1); }} />
-            </div>
-            <div style={{ minWidth: 145 }}>
-              <label className="label">To</label>
-              <input className="input" type="date" value={auditTo} onChange={(e) => { setAuditTo(e.target.value); setAuditPage(1); }} />
-            </div>
-            <button
-              className="btn-outline"
-              style={{ alignSelf: "flex-end" }}
-              onClick={() => { setAuditConnection(""); setAuditResult(""); setAuditCode(""); setAuditFrom(""); setAuditTo(""); setAuditPage(1); }}
-            >Clear filters</button>
-          </div>
-          {auditError && <div style={{ color: "#b91c1c", background: "#fef2f2", padding: 12, borderRadius: 6, fontSize: 13, marginBottom: 12 }}>{auditError} <button className="btn-outline" onClick={loadAudit}>Try again</button></div>}
-          <div className="table-wrap">
-            <table className="table" style={{ minWidth: 980 }}>
-              <thead><tr><th>TIMESTAMP</th><th>CONNECTION NAME</th><th>KEY PREFIX</th><th>SUBMITTED CODE</th><th>RESULT</th><th>SOURCE IP</th><th>USER AGENT</th></tr></thead>
-              <tbody>
-                {auditLoading && <tr><td colSpan={7} style={{ padding: 28, textAlign: "center", color: "#6b7280" }}>Loading audit log…</td></tr>}
-                {!auditLoading && !audit.length && <tr><td colSpan={7} style={{ padding: 28, textAlign: "center", color: "#9ca3af" }}>No verification requests match your filters.</td></tr>}
-                {!auditLoading && audit.map((row) => (
-                  <tr key={row.id}>
-                    <td>{displayDate(row.created_at)}</td>
-                    <td>{row.connection_name || (row.connection_id ? `Connection ${row.connection_id}` : "—")}</td>
-                    <td><code style={{ color: "#6b7280", fontSize: 12 }}>{row.key_prefix || row.connection_key_prefix ? `${row.key_prefix || row.connection_key_prefix}…` : "—"}</code></td>
-                    <td><code style={{ fontSize: 12 }}>{row.submitted_code || row.code || auditMetadata(row).code || "—"}</code></td>
-                    <td>
-                      <span className={["invalid", "error", "rate_limited"].includes(String(row.result || auditMetadata(row).result)) ? "badge-inactive" : "badge-active"}>
-                        {row.result || auditMetadata(row).result || "—"}
-                      </span>
-                    </td>
-                    <td style={{ color: "#6b7280", fontSize: 12 }}>{row.ip_address || row.ip || "—"}</td>
-                    <td style={{ color: "#6b7280", fontSize: 12, maxWidth: 260, whiteSpace: "normal" }}>{row.user_agent || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 14 }}>
-            <span style={{ color: "#6b7280", fontSize: 12 }}>Page {auditPage} of {auditPages}</span>
-            <button className="btn-outline" disabled={auditPage <= 1 || auditLoading} onClick={() => setAuditPage((page) => page - 1)}>Previous</button>
-            <button className="btn-outline" disabled={auditPage >= auditPages || auditLoading} onClick={() => setAuditPage((page) => page + 1)}>Next</button>
           </div>
         </div>
 
