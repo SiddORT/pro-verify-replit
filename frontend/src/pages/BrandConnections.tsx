@@ -226,16 +226,44 @@ export default function BrandConnections() {
                       <td>
                         <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
                           <Link
-                            className="btn-outline"
+                            className="btn-icon"
                             to={`/brands/${brandId}/connections/${connection.id}/audit`}
                             title={`View audit log for ${connection.name}`}
+                            aria-label={`View audit log for ${connection.name}`}
+                            style={{ display: "inline-flex", alignItems: "center", padding: 4, color: "#1b5e20" }}
                           >
-                            Audit log
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 3v18h18"/>
+                              <path d="m7 16 4-4 3 3 5-6"/>
+                            </svg>
                           </Link>
                           {status.active ? (
                             <>
-                            <button className="btn-outline" onClick={() => setConfirm({ action: "rotate", connection })} disabled={saving}>Rotate</button>
-                            <button className="btn-outline" style={{ color: "#dc2626" }} onClick={() => setConfirm({ action: "revoke", connection })} disabled={saving}>Revoke</button>
+                              <button
+                                className="btn-icon"
+                                title={`Rotate API key for ${connection.name}`}
+                                aria-label={`Rotate API key for ${connection.name}`}
+                                onClick={() => setConfirm({ action: "rotate", connection })}
+                                disabled={saving}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"/>
+                                  <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/>
+                                </svg>
+                              </button>
+                              <button
+                                className="btn-icon"
+                                title={`Revoke ${connection.name}`}
+                                aria-label={`Revoke ${connection.name}`}
+                                style={{ color: "#dc2626" }}
+                                onClick={() => setConfirm({ action: "revoke", connection })}
+                                disabled={saving}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="9"/>
+                                  <path d="m8 8 8 8M16 8l-8 8"/>
+                                </svg>
+                              </button>
                             </>
                           ) : <span style={{ color: "#9ca3af", fontSize: 12 }}>{displayDate(connection.revoked_at)}</span>}
                         </div>
