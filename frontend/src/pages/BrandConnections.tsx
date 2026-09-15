@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
@@ -59,6 +59,9 @@ export default function BrandConnections() {
   const [newKey, setNewKey] = useState("");
   const [newKeyFor, setNewKeyFor] = useState("");
   const [confirm, setConfirm] = useState<{ action: "rotate" | "revoke"; connection: Connection } | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   async function load() {
     if (!brandId) return;
@@ -80,7 +83,11 @@ export default function BrandConnections() {
     }
   }
 
-  useEffect(() => { load(); }, [brandId]);
+  useEffect(() => {
+    setSearch("");
+    setPage(1);
+    load();
+  }, [brandId]);
 
   function openCreate() {
     setName("");
@@ -161,6 +168,21 @@ export default function BrandConnections() {
   }
 
   const currentBrandName = brand?.name || `Brand ${brandId || ""}`;
+  const filteredConnections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return connections;
+    return connections.filter((connection) => {
+      const status = connectionStatus(connection).label;
+      return [connection.name, connection.key_prefix, status]
+        .some((value) => String(value || "").toLowerCase().includes(query));
+    });
+  }, [connections, search]);
+  const totalPages = Math.max(1, Math.ceil(filteredConnections.length / pageSize));
+  const visibleConnections = filteredConnections.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <>
@@ -219,22 +241,32 @@ export default function BrandConnections() {
         )}
 
         <div className="card" style={{ marginBottom: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
             <div>
               <h2 style={{ fontSize: 16, margin: 0 }}>Connections</h2>
               <p style={{ color: "#6b7280", fontSize: 13, margin: "5px 0 0" }}>Keys are never displayed again after creation or rotation.</p>
             </div>
+            <div className="search" style={{ maxWidth: 280 }}>
+              <span aria-hidden="true">⌕</span>
+              <input
+                aria-label="Search connections"
+                placeholder="Search connections..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
           </div>
           <div className="table-wrap">
-            <table className="table" style={{ minWidth: 820 }}>
-              <thead><tr><th>NAME</th><th>STATUS</th><th>KEY</th><th>CREATED</th><th>LAST USED</th><th>ROTATED</th><th>ACTIONS</th></tr></thead>
+            <table className="table" style={{ minWidth: 880 }}>
+              <thead><tr><th>SR NO</th><th>NAME</th><th>STATUS</th><th>KEY</th><th>CREATED</th><th>LAST USED</th><th>ROTATED</th><th>ACTIONS</th></tr></thead>
               <tbody>
-                {loading && <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#6b7280" }}>Loading connections…</td></tr>}
-                {!loading && !connections.length && <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>No API connections yet. Create one above to get started.</td></tr>}
-                {!loading && connections.map((connection) => {
+                {loading && <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: "#6b7280" }}>Loading connections…</td></tr>}
+                {!loading && !filteredConnections.length && <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>{search ? "No connections match your search." : "No API connections yet. Create one above to get started."}</td></tr>}
+                {!loading && visibleConnections.map((connection, index) => {
                   const status = connectionStatus(connection);
                   return (
                     <tr key={connection.id}>
+                      <td>{(page - 1) * pageSize + index + 1}</td>
                       <td style={{ fontWeight: 600 }}>{connection.name}</td>
                       <td>{status.active ? <span className="badge-active">Active</span> : <span className="badge-inactive">Revoked</span>}</td>
                       <td><code style={{ color: "#6b7280", fontSize: 12 }}>{connection.key_prefix || "••••••••"}</code></td>
@@ -292,6 +324,18 @@ export default function BrandConnections() {
               </tbody>
             </table>
           </div>
+          {!loading && filteredConnections.length > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
+              <span style={{ color: "#6b7280", fontSize: 12 }}>
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredConnections.length)} of {filteredConnections.length}
+              </span>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn-outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
+                <span style={{ color: "#6b7280", fontSize: 12 }}>Page {page} of {totalPages}</span>
+                <button className="btn-outline" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Next</button>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
