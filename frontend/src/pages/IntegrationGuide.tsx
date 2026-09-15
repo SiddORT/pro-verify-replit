@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, apiBase } from "../api";
 import Topbar from "../components/Topbar";
 
 function listFrom(data: any): any[] {
@@ -31,6 +31,8 @@ export default function IntegrationGuide() {
 
   const brandName = brand?.name || "this brand";
   const slug = brand?.slug || "your-brand-slug";
+  const baseUrl = (apiBase || window.location.origin).replace(/\/$/, "");
+  const verifyUrl = `${baseUrl}/api/v1/brands/${slug}/verify`;
 
   return (
     <>
@@ -57,12 +59,12 @@ export default function IntegrationGuide() {
           <div className="grid-2" style={{ gap: 28 }}>
             <div>
               <h2 style={sectionTitle}>Endpoint and required header</h2>
-              <pre style={codeBlock}>{`POST /api/v1/brands/${slug}/verify
+              <pre style={codeBlock}>{`POST ${verifyUrl}
 Content-Type: application/json
 X-API-Key: pv_your_connection_key`}</pre>
 
               <h2 style={sectionTitle}>Request example</h2>
-              <pre style={codeBlock}>{`curl -X POST https://your-domain.example/api/v1/brands/${slug}/verify \\
+              <pre style={codeBlock}>{`curl -X POST ${verifyUrl} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: $PROVERIFY_API_KEY" \\
   -d '{"code":"ABC-123"}'`}</pre>
