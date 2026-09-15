@@ -41,6 +41,7 @@ function auditMetadata(row: AuditRow): Record<string, any> {
 export default function ConnectionAuditLog() {
   const { brandId, connectionId } = useParams<{ brandId: string; connectionId: string }>();
   const [connectionName, setConnectionName] = useState("Connection");
+  const [brandName, setBrandName] = useState("Brand");
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -74,6 +75,7 @@ export default function ConnectionAuditLog() {
         api.get(`/api/brands/${brandId}/connections/${connectionId}/logs`, { params }),
       ]);
       setConnectionName(connectionResponse.data?.name || `Connection ${connectionId}`);
+      setBrandName(connectionResponse.data?.brand_name || `Brand ${brandId}`);
       setRows(listFrom(logsResponse.data));
       setTotal(Number(logsResponse.data?.total || 0));
     } catch (e: any) {
@@ -96,7 +98,14 @@ export default function ConnectionAuditLog() {
         <div className="page-header-row">
           <div>
             <h1 className="page-title">Audit log</h1>
-            <p className="page-sub">Authenticated verification requests made with {connectionName}</p>
+            <p className="page-sub" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              Authenticated verification requests for
+              <span className="badge-active">{brandName}</span>
+              using
+              <span style={{ background: "#eef2ff", color: "#3730a3", padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>
+                {connectionName}
+              </span>
+            </p>
           </div>
           <span style={{ color: "#6b7280", fontSize: 12 }}>{total} request{total === 1 ? "" : "s"}</span>
         </div>
