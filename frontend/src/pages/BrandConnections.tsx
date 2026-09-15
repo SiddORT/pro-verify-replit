@@ -207,19 +207,20 @@ export default function BrandConnections() {
           </div>
         )}
 
-        <div className="card" style={{ marginBottom: 18 }}>
-          <div style={{ maxWidth: 320 }}>
-            <label className="label" htmlFor="brand-filter">Brand</label>
-            <select
-              id="brand-filter"
-              className="select"
-              value={brandId || ""}
-              onChange={(e) => navigate(`/brands/${e.target.value}/connections`)}
-              disabled={loading}
-            >
-              {brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </div>
+        <div style={{ maxWidth: 320, marginBottom: 18 }}>
+          <label className="label" htmlFor="brand-filter">Brand</label>
+          <select
+            id="brand-filter"
+            className="select"
+            value={brandId || ""}
+            onChange={(e) => navigate(`/brands/${e.target.value}/connections`)}
+            disabled={loading}
+          >
+            {brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          <p style={{ color: "#6b7280", fontSize: 12, margin: "6px 0 0" }}>
+            Select a brand to change connections
+          </p>
         </div>
 
         {newKey && (
