@@ -172,7 +172,10 @@ export default function BrandConnections() {
             <h1 className="page-title">API connections</h1>
             <p className="page-sub">Manage named API keys for {currentBrandName}</p>
           </div>
-          <button className="btn" onClick={openCreate}>Create connection</button>
+          <div className="row" style={{ gap: 10 }}>
+            <Link className="btn-outline" to={`/brands/${brandId}/connections/guide`}>Integration guide</Link>
+            <button className="btn" onClick={openCreate}>Create connection</button>
+          </div>
         </div>
 
         {error && (
@@ -291,47 +294,6 @@ export default function BrandConnections() {
           </div>
         </div>
 
-        <div className="card">
-          <h2 style={{ fontSize: 18, margin: "0 0 8px" }}>Integration guide</h2>
-          <p style={{ color: "#6b7280", fontSize: 13, margin: "0 0 18px", lineHeight: 1.5 }}>
-            Use a connection key to authenticate server-to-server verification requests for this brand.
-          </p>
-          <div className="grid-2" style={{ gap: 22 }}>
-            <div>
-              <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Endpoint and required header</h3>
-              <pre style={codeBlock}>{`POST /api/v1/brands/${brand?.slug || "your-brand-slug"}/verify
-Content-Type: application/json
-X-API-Key: pv_your_connection_key`}</pre>
-              <h3 style={{ fontSize: 14, margin: "18px 0 8px" }}>Request example</h3>
-              <pre style={codeBlock}>{`curl -X POST https://your-domain.example/api/v1/brands/${brand?.slug || "your-brand-slug"}/verify \\
-  -H "Content-Type: application/json" \\
-  -H "X-API-Key: $PROVERIFY_API_KEY" \\
-  -d '{"code":"ABC-123"}'`}</pre>
-              <h3 style={{ fontSize: 14, margin: "18px 0 8px" }}>Response examples</h3>
-              <pre style={codeBlock}>{`// First verification (HTTP 200)
-{"status":"first","brand":"${currentBrandName}","code":"ABC-123","verified_at":"2025-01-15T10:00:00Z"}
-
-// Repeat verification (HTTP 200)
-{"status":"repeat","brand":"${currentBrandName}","code":"ABC-123","first_verified_at":"2025-01-15T10:00:00Z","current_scan_at":"2025-01-16T09:30:00Z","history":["2025-01-15T10:00:00Z"]}
-
-// Invalid code (HTTP 200)
-{"status":"invalid","brand":"${currentBrandName}"}`}</pre>
-            </div>
-            <div>
-              <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Key safety and rotation</h3>
-              <ul style={docList}>
-                <li>Keep keys on your server only. Never put them in browser code, browser storage, mobile apps, source control, or URLs.</li>
-                <li>Use a separate named connection for each environment or integration.</li>
-                <li>Rotation immediately invalidates the prior key. Update the secret in your server immediately after rotating, then verify requests with the new key.</li>
-                <li>The full key is shown only once. Copy it to a secrets manager immediately.</li>
-              </ul>
-              <h3 style={{ fontSize: 14, margin: "18px 0 8px" }}>Audit logs</h3>
-              <p style={{ color: "#4b5563", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                Each authenticated verification request is recorded newest-first with its connection, submitted code, result (first, repeat, or invalid), source IP, and user agent. Requests rejected before authentication are not attributable to a connection and do not appear in this connection audit log.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
       <ConfirmModal
         open={!!confirm}
@@ -388,23 +350,3 @@ X-API-Key: pv_your_connection_key`}</pre>
     </>
   );
 }
-
-const codeBlock: React.CSSProperties = {
-  margin: 0,
-  padding: 12,
-  overflowX: "auto",
-  borderRadius: 6,
-  background: "#111827",
-  color: "#e5e7eb",
-  fontSize: 12,
-  lineHeight: 1.55,
-  whiteSpace: "pre-wrap",
-};
-
-const docList: React.CSSProperties = {
-  color: "#4b5563",
-  fontSize: 13,
-  lineHeight: 1.5,
-  margin: 0,
-  paddingLeft: 20,
-};
