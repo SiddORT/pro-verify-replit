@@ -46,6 +46,8 @@ export default function ConnectionAuditLog() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [result, setResult] = useState("");
   const [code, setCode] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -62,6 +64,7 @@ export default function ConnectionAuditLog() {
         limit: pageSize,
         offset: (page - 1) * pageSize,
       };
+      if (search.trim()) params.search = search.trim();
       if (result) params.result = result;
       if (code.trim()) params.code = code.trim();
       if (dateFrom) params.date_from = dateFrom;
@@ -80,7 +83,7 @@ export default function ConnectionAuditLog() {
     }
   }
 
-  useEffect(() => { load(); }, [brandId, connectionId, page, result, code, dateFrom, dateTo]);
+  useEffect(() => { load(); }, [brandId, connectionId, page, search, result, code, dateFrom, dateTo]);
   useEffect(() => {
     if (page > pages) setPage(pages);
   }, [page, pages]);
@@ -99,47 +102,73 @@ export default function ConnectionAuditLog() {
         </div>
 
         <div className="card">
-          <div className="toolbar">
-            <div style={{ minWidth: 150 }}>
-              <label className="label">Result</label>
-              <select className="select" value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }}>
-                <option value="">All results</option>
-                <option value="first">First</option>
-                <option value="repeat">Repeat</option>
-                <option value="invalid">Invalid</option>
-                <option value="error">Request error</option>
-                <option value="rate_limited">Rate limited</option>
-              </select>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: filtersOpen ? 16 : 14, flexWrap: "wrap" }}>
+            <div className="search" style={{ maxWidth: 340 }}>
+              <span aria-hidden="true">⌕</span>
+              <input
+                aria-label="Search audit log"
+                placeholder="Search audit log..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
             </div>
-            <div style={{ minWidth: 190 }}>
-              <label className="label">Code</label>
-              <input className="input" placeholder="Search submitted code" value={code} onChange={(e) => { setCode(e.target.value); setPage(1); }} />
-            </div>
-            <div style={{ minWidth: 145 }}>
-              <label className="label">From</label>
-              <input className="input" type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
-            </div>
-            <div style={{ minWidth: 145 }}>
-              <label className="label">To</label>
-              <input className="input" type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
-            </div>
-            <button className="btn-outline" style={{ alignSelf: "flex-end" }} onClick={() => {
-              setResult(""); setCode(""); setDateFrom(""); setDateTo(""); setPage(1);
-            }}>Clear filters</button>
+            <button
+              className="btn-icon"
+              title={filtersOpen ? "Hide filters" : "Show filters"}
+              aria-label={filtersOpen ? "Hide audit log filters" : "Show audit log filters"}
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((open) => !open)}
+              style={{ border: "1px solid var(--border)", borderRadius: 6, padding: 8, color: filtersOpen ? "var(--green)" : "#6b7280", background: filtersOpen ? "var(--green-light)" : "#fff" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+              </svg>
+            </button>
           </div>
+          {filtersOpen && (
+            <div className="toolbar">
+              <div style={{ minWidth: 150 }}>
+                <label className="label">Result</label>
+                <select className="select" value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }}>
+                  <option value="">All results</option>
+                  <option value="first">First</option>
+                  <option value="repeat">Repeat</option>
+                  <option value="invalid">Invalid</option>
+                  <option value="error">Request error</option>
+                  <option value="rate_limited">Rate limited</option>
+                </select>
+              </div>
+              <div style={{ minWidth: 190 }}>
+                <label className="label">Submitted code</label>
+                <input className="input" placeholder="Filter by code" value={code} onChange={(e) => { setCode(e.target.value); setPage(1); }} />
+              </div>
+              <div style={{ minWidth: 145 }}>
+                <label className="label">From</label>
+                <input className="input" type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
+              </div>
+              <div style={{ minWidth: 145 }}>
+                <label className="label">To</label>
+                <input className="input" type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
+              </div>
+              <button className="btn-outline" style={{ alignSelf: "flex-end" }} onClick={() => {
+                setResult(""); setCode(""); setDateFrom(""); setDateTo(""); setPage(1);
+              }}>Clear filters</button>
+            </div>
+          )}
 
           {error && <div style={{ color: "#b91c1c", background: "#fef2f2", padding: 12, borderRadius: 6, fontSize: 13, marginBottom: 12 }}>{error} <button className="btn-outline" onClick={load}>Try again</button></div>}
           <div className="table-wrap">
-            <table className="table" style={{ minWidth: 880 }}>
-              <thead><tr><th>TIMESTAMP</th><th>KEY PREFIX</th><th>SUBMITTED CODE</th><th>RESULT</th><th>SOURCE IP</th><th>USER AGENT</th></tr></thead>
+            <table className="table" style={{ minWidth: 940 }}>
+              <thead><tr><th>SR NO</th><th>TIMESTAMP</th><th>KEY PREFIX</th><th>SUBMITTED CODE</th><th>RESULT</th><th>SOURCE IP</th><th>USER AGENT</th></tr></thead>
               <tbody>
-                {loading && <tr><td colSpan={6} style={{ padding: 28, textAlign: "center", color: "#6b7280" }}>Loading audit log…</td></tr>}
-                {!loading && !rows.length && <tr><td colSpan={6} style={{ padding: 28, textAlign: "center", color: "#9ca3af" }}>No verification requests match your filters.</td></tr>}
-                {!loading && rows.map((row) => {
+                {loading && <tr><td colSpan={7} style={{ padding: 28, textAlign: "center", color: "#6b7280" }}>Loading audit log…</td></tr>}
+                {!loading && !rows.length && <tr><td colSpan={7} style={{ padding: 28, textAlign: "center", color: "#9ca3af" }}>No verification requests match your search or filters.</td></tr>}
+                {!loading && rows.map((row, index) => {
                   const metadata = auditMetadata(row);
                   const rowResult = row.result || metadata.result || "—";
                   return (
                     <tr key={row.id}>
+                      <td>{(page - 1) * pageSize + index + 1}</td>
                       <td>{row.created_at ? fmtIST(row.created_at) : "—"}</td>
                       <td><code style={{ color: "#6b7280", fontSize: 12 }}>{row.key_prefix || row.connection_key_prefix ? `${row.key_prefix || row.connection_key_prefix}…` : "—"}</code></td>
                       <td><code style={{ fontSize: 12 }}>{row.submitted_code || row.code || metadata.code || "—"}</code></td>
@@ -152,11 +181,18 @@ export default function ConnectionAuditLog() {
               </tbody>
             </table>
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 14 }}>
-            <span style={{ color: "#6b7280", fontSize: 12 }}>Page {page} of {pages}</span>
-            <button className="btn-outline" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>Previous</button>
-            <button className="btn-outline" disabled={page >= pages || loading} onClick={() => setPage((value) => value + 1)}>Next</button>
-          </div>
+          {!loading && total > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
+              <span style={{ color: "#6b7280", fontSize: 12 }}>
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+              </span>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn-outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
+                <span style={{ color: "#6b7280", fontSize: 12 }}>Page {page} of {pages}</span>
+                <button className="btn-outline" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>Next</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
