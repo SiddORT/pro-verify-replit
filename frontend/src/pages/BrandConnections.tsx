@@ -208,7 +208,9 @@ export default function BrandConnections() {
         )}
 
         <div style={{ maxWidth: 320, marginBottom: 18 }}>
-          <label className="label" htmlFor="brand-filter">Brand</label>
+          <label className="label" htmlFor="brand-filter">
+            Brand <span style={{ color: "#9ca3af", fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>(select a brand to change connections)</span>
+          </label>
           <select
             id="brand-filter"
             className="select"
@@ -218,9 +220,6 @@ export default function BrandConnections() {
           >
             {brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
-          <p style={{ color: "#6b7280", fontSize: 12, margin: "6px 0 0" }}>
-            Select a brand to change connections
-          </p>
         </div>
 
         {newKey && (
