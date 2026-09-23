@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
-import { fmtEasternLong } from "../utils/time";
+import { fmtISTLong } from "../utils/time";
 
 type AuditRow = {
   id: number | string;
@@ -178,7 +178,7 @@ export default function ConnectionAuditLog() {
                   return (
                     <tr key={row.id}>
                       <td>{(page - 1) * pageSize + index + 1}</td>
-                      <td>{row.created_at ? fmtEasternLong(row.created_at) : "—"}</td>
+                      <td>{row.created_at ? fmtISTLong(row.created_at) : "—"}</td>
                       <td><code style={{ color: "#6b7280", fontSize: 12 }}>{row.key_prefix || row.connection_key_prefix ? `${row.key_prefix || row.connection_key_prefix}…` : "—"}</code></td>
                       <td><code style={{ fontSize: 12 }}>{row.submitted_code || row.code || metadata.code || "—"}</code></td>
                       <td><span className={["invalid", "error", "rate_limited"].includes(String(rowResult)) ? "badge-inactive" : "badge-active"}>{rowResult}</span></td>

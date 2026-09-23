@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
-import { fmtEastern } from "../utils/time";
+import { fmtIST } from "../utils/time";
 
 type Row = {
   id: number;
@@ -86,7 +86,7 @@ export default function Activity() {
               {rows.map((r, i) => (
                 <tr key={r.id}>
                   <td>{i + 1}</td>
-                  <td>{fmtEastern(r.created_at)}</td>
+                  <td>{fmtIST(r.created_at)}</td>
                   <td>{r.brand || "—"}</td>
                   <td><span className="code-pill">{r.code}</span></td>
                   <td>

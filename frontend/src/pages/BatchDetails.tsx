@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import Topbar from "../components/Topbar";
 import { useToast } from "../components/Toast";
-import { fmtEastern, fmtEasternLong, fmtRel } from "../utils/time";
+import { fmtIST, fmtISTLong, fmtRel } from "../utils/time";
 
 type Batch = {
   id: number;
@@ -379,7 +379,7 @@ function LogsModal({ code, onClose }: { code: Code; onClose: () => void }) {
               <thead>
                 <tr>
                   <th style={{ width: 56 }}>#</th>
-                  <th>When (ET)</th>
+                  <th>When (IST)</th>
                   <th>Result</th>
                   <th>Source</th>
                   <th>IP Address</th>
@@ -391,7 +391,7 @@ function LogsModal({ code, onClose }: { code: Code; onClose: () => void }) {
                   <tr key={l.id}>
                     <td style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>{page * LOG_PAGE_SIZE + i + 1}</td>
                     <td style={{ fontSize: 13 }}>
-                      <div>{fmtEasternLong(l.created_at)}</div>
+                      <div>{fmtISTLong(l.created_at)}</div>
                       <div style={{ fontSize: 11, color: "#6b7280" }}>{fmtRel(l.created_at)}</div>
                     </td>
                     <td>
@@ -464,7 +464,7 @@ function StatTile({ label, value, sub, accent }: { label: string; value: string;
   );
 }
 
-const fmtDate = fmtEastern;
+const fmtDate = fmtIST;
 
 function pct(part: number, whole: number) {
   if (!whole) return "0% verified";

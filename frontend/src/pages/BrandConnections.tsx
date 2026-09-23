@@ -4,7 +4,7 @@ import { api } from "../api";
 import Topbar from "../components/Topbar";
 import ConfirmModal from "../components/ConfirmModal";
 import { useToast } from "../components/Toast";
-import { fmtEastern } from "../utils/time";
+import { fmtIST } from "../utils/time";
 
 type Connection = {
   id: number | string;
@@ -40,7 +40,7 @@ function errorMessage(error: any, fallback: string): string {
 }
 
 function displayDate(value?: string | null): string {
-  return value ? fmtEastern(value) : "—";
+  return value ? fmtIST(value) : "—";
 }
 
 export default function BrandConnections() {
