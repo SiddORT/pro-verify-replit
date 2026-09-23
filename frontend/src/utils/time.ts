@@ -1,4 +1,4 @@
-export const IST_TZ = "Asia/Kolkata";
+export const EASTERN_TZ = "America/New_York";
 
 function toDate(iso: string | Date): Date {
   if (iso instanceof Date) return iso;
@@ -7,25 +7,25 @@ function toDate(iso: string | Date): Date {
   return new Date(hasTz ? s : s + "Z");
 }
 
-export function fmtIST(iso: string | Date): string {
-  return toDate(iso).toLocaleString("en-IN", {
-    timeZone: IST_TZ,
+export function fmtEastern(iso: string | Date): string {
+  return toDate(iso).toLocaleString("en-US", {
+    timeZone: EASTERN_TZ, timeZoneName: "short",
     year: "numeric", month: "short", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hour12: true,
-  }) + " IST";
+  });
 }
 
-export function fmtISTLong(iso: string | Date): string {
-  return toDate(iso).toLocaleString("en-IN", {
-    timeZone: IST_TZ,
+export function fmtEasternLong(iso: string | Date): string {
+  return toDate(iso).toLocaleString("en-US", {
+    timeZone: EASTERN_TZ, timeZoneName: "short",
     year: "numeric", month: "short", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
-  }) + " IST";
+  });
 }
 
-export function fmtISTDate(iso: string | Date): string {
-  return toDate(iso).toLocaleDateString("en-IN", {
-    timeZone: IST_TZ, year: "numeric", month: "short", day: "2-digit",
+export function fmtEasternDate(iso: string | Date): string {
+  return toDate(iso).toLocaleDateString("en-US", {
+    timeZone: EASTERN_TZ, year: "numeric", month: "short", day: "2-digit",
   });
 }
 
@@ -33,6 +33,10 @@ export function fmtRel(iso: string | Date): string {
   const t = toDate(iso).getTime();
   const diff = Date.now() - t;
   const s = Math.floor(diff / 1000);
+  if (s < -60) {
+    const ahead = Math.ceil(-s / 60);
+    return ahead < 60 ? `in ${ahead}m` : `in ${Math.ceil(ahead / 60)}h`;
+  }
   if (s < 0) return "just now";
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;

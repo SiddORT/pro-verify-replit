@@ -5,7 +5,7 @@ import Topbar from "../components/Topbar";
 import ConfirmModal from "../components/ConfirmModal";
 import RowActions from "../components/RowActions";
 import { useToast } from "../components/Toast";
-import { fmtIST } from "../utils/time";
+import { fmtEastern } from "../utils/time";
 
 type Batch = {
   id: number;
@@ -211,4 +211,4 @@ export default function BatchUploads() {
   );
 }
 
-const fmtDate = fmtIST;
+const fmtDate = fmtEastern;

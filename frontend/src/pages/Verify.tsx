@@ -12,8 +12,8 @@ type Result =
   | { status: "repeat"; brand: string; code: string; first_verified_at: string; current_scan_at: string; history: string[] }
   | { status: "invalid"; brand: string };
 
-import { fmtIST } from "../utils/time";
-function fmt(ts: string) { return fmtIST(ts); }
+import { fmtEastern } from "../utils/time";
+function fmt(ts: string) { return fmtEastern(ts); }
 
 export default function Verify() {
   const { slug } = useParams();

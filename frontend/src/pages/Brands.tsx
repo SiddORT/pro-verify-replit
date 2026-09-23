@@ -4,7 +4,7 @@ import { api, assetUrl } from "../api";
 import Topbar from "../components/Topbar";
 import { useToast } from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { fmtIST } from "../utils/time";
+import { fmtEastern } from "../utils/time";
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brand";
@@ -271,8 +271,8 @@ export default function Brands() {
                       {b.is_active ? <span className="badge-active">Active</span> : <span className="badge-inactive">Inactive</span>}
                     </button>
                   </td>
-                  <td>{fmtIST(b.created_at)}</td>
-                  <td>{fmtIST(b.updated_at)}</td>
+                  <td>{fmtEastern(b.created_at)}</td>
+                  <td>{fmtEastern(b.updated_at)}</td>
                   <td>
                     <div className="row" style={{ gap: 4 }}>
                       <a
