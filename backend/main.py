@@ -1087,19 +1087,19 @@ def code_logs(
     ).first()
     if not pc:
         raise HTTPException(404, "Code not found")
-    where = ["code = :c", "brand_id = :b"]
+    where = ["v.code = :c", "v.brand_id = :b"]
     params: dict = {"c": pc[1], "b": pc[2]}
     if search:
-        where.append("(CAST(ip_address AS TEXT) ILIKE :q OR user_agent ILIKE :q)")
+        where.append("(CAST(v.ip_address AS TEXT) ILIKE :q OR v.user_agent ILIKE :q)")
         params["q"] = f"%{search}%"
     if valid == "true":
-        where.append("is_valid = TRUE")
+        where.append("v.is_valid = TRUE")
     elif valid == "false":
-        where.append("is_valid = FALSE")
+        where.append("v.is_valid = FALSE")
     w = " AND ".join(where)
     total = (
         db.execute(
-            text(f"SELECT COUNT(*) FROM verification_logs WHERE {w}"), params
+            text(f"SELECT COUNT(*) FROM verification_logs v WHERE {w}"), params
         ).scalar()
         or 0
     )
@@ -1107,10 +1107,12 @@ def code_logs(
     params["o"] = offset
     rows = db.execute(
         text(f"""
-        SELECT id, is_valid, created_at, ip_address, user_agent
-        FROM verification_logs
+        SELECT v.id, v.is_valid, v.created_at, v.ip_address, v.user_agent,
+               v.connection_id, c.name
+        FROM verification_logs v
+        LEFT JOIN brand_connections c ON c.id = v.connection_id
         WHERE {w}
-        ORDER BY created_at DESC, id DESC
+        ORDER BY v.created_at DESC, v.id DESC
         LIMIT :l OFFSET :o
     """),
         params,
@@ -1129,6 +1131,9 @@ def code_logs(
                 "created_at": r[2].isoformat() if r[2] else None,
                 "ip": r[3],
                 "user_agent": r[4],
+                "connection_id": r[5],
+                "connection_name": r[6],
+                "source": "connection" if r[5] is not None else "public",
             }
             for r in rows
         ],
@@ -1314,8 +1319,8 @@ def _verify_brand_code(
         db.execute(
             text(
                 """INSERT INTO verification_logs
-                    (code, brand_id, connection_id, ip_address, user_agent, is_valid)
-                    VALUES (:c,:b,:connection_id,:ip,:ua,FALSE)"""
+                    (code, brand_id, connection_id, ip_address, user_agent, is_valid, created_at)
+                    VALUES (:c,:b,:connection_id,:ip,:ua,FALSE,timezone('UTC', now()))"""
             ),
             {
                 "c": code,
@@ -1337,8 +1342,8 @@ def _verify_brand_code(
     db.execute(
         text(
             """INSERT INTO verification_logs
-                (code, brand_id, connection_id, ip_address, user_agent, is_valid)
-                VALUES (:c,:b,:connection_id,:ip,:ua,TRUE)"""
+                (code, brand_id, connection_id, ip_address, user_agent, is_valid, created_at)
+                VALUES (:c,:b,:connection_id,:ip,:ua,TRUE,timezone('UTC', now()))"""
         ),
         {
             "c": code,
@@ -1478,9 +1483,10 @@ def _record_api_call(
         text(
             """INSERT INTO api_call_logs
                 (brand_id, connection_id, method, path, status_code,
-                 submitted_code, result, key_prefix, ip_address, user_agent, metadata)
+                 submitted_code, result, key_prefix, ip_address, user_agent, metadata, created_at)
                 VALUES (:brand_id,:connection_id,:method,:path,:status_code,
-                        :submitted_code,:result,:key_prefix,:ip,:ua,CAST(:metadata AS JSONB))"""
+                        :submitted_code,:result,:key_prefix,:ip,:ua,CAST(:metadata AS JSONB),
+                        timezone('UTC', now()))"""
         ),
         {
             "brand_id": connection["brand_id"],
@@ -1497,7 +1503,7 @@ def _record_api_call(
         },
     )
     db.execute(
-        text("UPDATE brand_connections SET last_used_at=NOW() WHERE id=:i"),
+        text("UPDATE brand_connections SET last_used_at=timezone('UTC', now()) WHERE id=:i"),
         {"i": connection["id"]},
     )
 

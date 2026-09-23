@@ -282,13 +282,13 @@ class BrandConnectionRouteTests(unittest.TestCase):
             ),
             {"brand_id": self.brand_id, "batch": f"ROUTE-{suffix}"},
         ).scalar_one()
-        self.db.execute(
+        self.code_id = self.db.execute(
             text(
                 "INSERT INTO product_codes(code,brand_id,batch_id) "
-                "VALUES('ROUTE-CODE',:brand_id,:batch_id)"
+                "VALUES('ROUTE-CODE',:brand_id,:batch_id) RETURNING id"
             ),
             {"brand_id": self.brand_id, "batch_id": batch_id},
-        )
+        ).scalar_one()
         self.db.commit()
         main.app.dependency_overrides[main.current_admin] = lambda: {
             "id": 1,
@@ -404,12 +404,43 @@ class BrandConnectionRouteTests(unittest.TestCase):
         )
         self.assertTrue(all(row[2] == connection_id and row[3] for row in audit))
 
+        public = self.client.post(
+            "/api/public/verify",
+            json={"slug": self.slug, "code": "ROUTE-CODE"},
+        )
+        self.assertEqual(public.status_code, 200, public.text)
+        self.assertEqual(public.json()["status"], "repeat")
+
+        batch_logs = self.client.get(f"/api/codes/{self.code_id}/logs")
+        self.assertEqual(batch_logs.status_code, 200, batch_logs.text)
+        self.assertEqual(batch_logs.json()["total"], 4)
+        sources = batch_logs.json()["items"]
+        self.assertEqual(
+            [row["source"] for row in sources].count("connection"), 3
+        )
+        self.assertEqual([row["source"] for row in sources].count("public"), 1)
+        self.assertTrue(
+            all(row["connection_name"] == "Route connection"
+                for row in sources if row["source"] == "connection")
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/brands/{self.brand_id}/connections/{connection_id}/logs"
+            ).json()["total"],
+            len(audit),
+        )
+        now_utc = dt.datetime.utcnow()
+        for row in sources:
+            created = dt.datetime.fromisoformat(row["created_at"])
+            self.assertLess(abs((now_utc - created).total_seconds()), 60)
+
         activity = self.client.get(
             "/api/activity", params={"brand_id": self.brand_id}
         )
         self.assertEqual(activity.status_code, 200)
-        self.assertTrue(
-            all(row["source"] == "connection" for row in activity.json())
+        self.assertEqual(
+            {row["source"] for row in activity.json()},
+            {"connection", "public"},
         )
 
 

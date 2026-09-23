@@ -32,6 +32,8 @@ type LogEntry = {
   created_at: string;
   ip: string | null;
   user_agent: string | null;
+  source: "connection" | "public";
+  connection_name: string | null;
 };
 
 const PAGE_SIZE = 20;
@@ -379,6 +381,7 @@ function LogsModal({ code, onClose }: { code: Code; onClose: () => void }) {
                   <th style={{ width: 56 }}>#</th>
                   <th>When (IST)</th>
                   <th>Result</th>
+                  <th>Source</th>
                   <th>IP Address</th>
                   <th>Device / User Agent</th>
                 </tr>
@@ -395,6 +398,9 @@ function LogsModal({ code, onClose }: { code: Code; onClose: () => void }) {
                       {l.is_valid
                         ? <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>✓ Valid</span>
                         : <span style={{ background: "#fee2e2", color: "#991b1b", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>✕ Invalid</span>}
+                    </td>
+                    <td style={{ fontSize: 12 }}>
+                      {l.source === "connection" ? `API · ${l.connection_name || "Connection"}` : "Public link"}
                     </td>
                     <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: "#374151" }}>
                       {l.ip || <span style={{ color: "#9ca3af" }}>—</span>}
