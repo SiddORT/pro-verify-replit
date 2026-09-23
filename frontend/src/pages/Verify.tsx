@@ -149,7 +149,7 @@ export default function Verify() {
                 style={{
                   width: "100%", padding: "16px 18px", fontSize: 17, fontFamily: "ui-monospace, Menlo, monospace",
                   border: `2px solid ${color}33`, borderRadius: 10, outline: "none", textAlign: "center",
-                  letterSpacing: "0.08em", textTransform: "uppercase", background: "#fafafa",
+                  letterSpacing: "0.08em", background: "#fafafa",
                 }}
                 onFocus={(e) => (e.target.style.borderColor = color)}
                 onBlur={(e) => (e.target.style.borderColor = `${color}33`)}
