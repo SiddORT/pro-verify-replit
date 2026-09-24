@@ -6,6 +6,7 @@ import hmac
 import json
 import secrets
 import datetime as dt
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional, List
 from fastapi import (
@@ -41,7 +42,19 @@ if not SECRET_KEY:
     raise RuntimeError("SESSION_SECRET environment variable is required")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7
+IST = ZoneInfo("Asia/Kolkata")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+
+def _db_timestamp_ist(value: Optional[dt.datetime]) -> Optional[str]:
+    """Database timestamps are naive IST wall-clock values, not UTC instants."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=IST)
+    else:
+        value = value.astimezone(IST)
+    return value.isoformat()
 
 
 def hash_password(p: str) -> str:
@@ -268,8 +281,8 @@ def list_brands(
             "desktop_image": r[4],
             "mobile_image": r[5],
             "is_active": r[6],
-            "created_at": r[7].isoformat() if r[7] else None,
-            "updated_at": r[8].isoformat() if r[8] else None,
+            "created_at": _db_timestamp_ist(r[7]),
+            "updated_at": _db_timestamp_ist(r[8]),
         }
         for r in rows
     ]
@@ -365,21 +378,11 @@ def _connection_dict(row) -> dict:
         "brand_name": row[2] if len(row) > 2 else None,
         "name": row[3] if len(row) > 3 else row[2],
         "key_prefix": row[4] if len(row) > 4 else row[3],
-        "revoked_at": (
-            row[5].isoformat() if len(row) > 5 and row[5] else None
-        ),
-        "last_used_at": (
-            row[6].isoformat() if len(row) > 6 and row[6] else None
-        ),
-        "created_at": (
-            row[7].isoformat() if len(row) > 7 and row[7] else None
-        ),
-        "updated_at": (
-            row[8].isoformat() if len(row) > 8 and row[8] else None
-        ),
-        "rotated_at": (
-            row[9].isoformat() if len(row) > 9 and row[9] else None
-        ),
+        "revoked_at": _db_timestamp_ist(row[5]) if len(row) > 5 else None,
+        "last_used_at": _db_timestamp_ist(row[6]) if len(row) > 6 else None,
+        "created_at": _db_timestamp_ist(row[7]) if len(row) > 7 else None,
+        "updated_at": _db_timestamp_ist(row[8]) if len(row) > 8 else None,
+        "rotated_at": _db_timestamp_ist(row[9]) if len(row) > 9 else None,
         "is_active": not (len(row) > 5 and row[5]),
     }
 
@@ -935,7 +938,7 @@ def list_batches(
                 "batch_number": r[1],
                 "file_name": r[2],
                 "codes_uploaded": r[3],
-                "created_at": r[4].isoformat() if r[4] else None,
+                "created_at": _db_timestamp_ist(r[4]),
                 "brand_id": r[5],
                 "brand_name": r[6],
                 "brand_slug": r[7],
@@ -979,13 +982,13 @@ def batch_detail(
         "batch_number": row[1],
         "file_name": row[2],
         "codes_uploaded": row[3],
-        "created_at": row[4].isoformat() if row[4] else None,
+        "created_at": _db_timestamp_ist(row[4]),
         "brand_id": row[5],
         "brand_name": row[6],
         "brand_slug": row[7],
         "total_verifications": int(stats[0] or 0),
         "codes_verified": int(stats[1] or 0),
-        "last_verified_at": stats[2].isoformat() if stats[2] else None,
+        "last_verified_at": _db_timestamp_ist(stats[2]),
     }
 
 
@@ -1056,9 +1059,9 @@ def batch_codes(
             {
                 "id": r[0],
                 "code": r[1],
-                "created_at": r[2].isoformat() if r[2] else None,
+                "created_at": _db_timestamp_ist(r[2]),
                 "verification_count": int(r[3] or 0),
-                "last_verified_at": r[4].isoformat() if r[4] else None,
+                "last_verified_at": _db_timestamp_ist(r[4]),
             }
             for r in rows
         ],
@@ -1128,7 +1131,7 @@ def code_logs(
             {
                 "id": r[0],
                 "is_valid": r[1],
-                "created_at": r[2].isoformat() if r[2] else None,
+                "created_at": _db_timestamp_ist(r[2]),
                 "ip": r[3],
                 "user_agent": r[4],
                 "connection_id": r[5],
@@ -1192,7 +1195,7 @@ def list_codes(
             {
                 "id": r[0],
                 "code": r[1],
-                "created_at": r[2].isoformat() if r[2] else None,
+                "created_at": _db_timestamp_ist(r[2]),
                 "brand_name": r[3],
             }
             for r in rows
@@ -1319,8 +1322,8 @@ def _verify_brand_code(
         db.execute(
             text(
                 """INSERT INTO verification_logs
-                    (code, brand_id, connection_id, ip_address, user_agent, is_valid, created_at)
-                    VALUES (:c,:b,:connection_id,:ip,:ua,FALSE,timezone('UTC', now()))"""
+                    (code, brand_id, connection_id, ip_address, user_agent, is_valid)
+                    VALUES (:c,:b,:connection_id,:ip,:ua,FALSE)"""
             ),
             {
                 "c": code,
@@ -1338,12 +1341,12 @@ def _verify_brand_code(
                 ORDER BY created_at ASC"""),
         {"c": code, "b": brand[0]},
     ).all()
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now(IST)
     db.execute(
         text(
             """INSERT INTO verification_logs
-                (code, brand_id, connection_id, ip_address, user_agent, is_valid, created_at)
-                VALUES (:c,:b,:connection_id,:ip,:ua,TRUE,timezone('UTC', now()))"""
+                (code, brand_id, connection_id, ip_address, user_agent, is_valid)
+                VALUES (:c,:b,:connection_id,:ip,:ua,TRUE)"""
         ),
         {
             "c": code,
@@ -1365,9 +1368,9 @@ def _verify_brand_code(
         "status": "repeat",
         "brand": brand[1],
         "code": code,
-        "first_verified_at": prior[0][0].isoformat(),
+        "first_verified_at": _db_timestamp_ist(prior[0][0]),
         "current_scan_at": now.isoformat(),
-        "history": [r[0].isoformat() for r in prior],
+        "history": [_db_timestamp_ist(r[0]) for r in prior],
     }
 
 
@@ -1483,10 +1486,9 @@ def _record_api_call(
         text(
             """INSERT INTO api_call_logs
                 (brand_id, connection_id, method, path, status_code,
-                 submitted_code, result, key_prefix, ip_address, user_agent, metadata, created_at)
+                 submitted_code, result, key_prefix, ip_address, user_agent, metadata)
                 VALUES (:brand_id,:connection_id,:method,:path,:status_code,
-                        :submitted_code,:result,:key_prefix,:ip,:ua,CAST(:metadata AS JSONB),
-                        timezone('UTC', now()))"""
+                        :submitted_code,:result,:key_prefix,:ip,:ua,CAST(:metadata AS JSONB))"""
         ),
         {
             "brand_id": connection["brand_id"],
@@ -1503,7 +1505,7 @@ def _record_api_call(
         },
     )
     db.execute(
-        text("UPDATE brand_connections SET last_used_at=timezone('UTC', now()) WHERE id=:i"),
+        text("UPDATE brand_connections SET last_used_at=NOW() WHERE id=:i"),
         {"i": connection["id"]},
     )
 
@@ -1596,7 +1598,7 @@ def activity(
             "id": r[0],
             "code": r[1],
             "is_valid": r[2],
-            "created_at": r[3].isoformat() if r[3] else None,
+            "created_at": _db_timestamp_ist(r[3]),
             "ip": r[4],
             "brand": r[5],
             "connection_id": r[6],
@@ -1626,7 +1628,7 @@ def _api_call_log_item(row) -> dict:
         "ip_address": row[11],
         "user_agent": row[12],
         "metadata": row[13] or {},
-        "created_at": row[14].isoformat() if row[14] else None,
+        "created_at": _db_timestamp_ist(row[14]),
     }
 
 

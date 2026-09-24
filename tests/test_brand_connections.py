@@ -113,6 +113,19 @@ def connection_row(connection_id=4, revoked_at=None):
 
 
 class BrandConnectionTests(unittest.TestCase):
+    def test_db_timestamp_serialization_preserves_ist_wall_clock(self):
+        naive = dt.datetime(2026, 9, 23, 19, 0, 0)
+        self.assertEqual(
+            main._db_timestamp_ist(naive), "2026-09-23T19:00:00+05:30"
+        )
+        self.assertEqual(
+            main._db_timestamp_ist(
+                dt.datetime(2026, 9, 23, 13, 30, tzinfo=dt.timezone.utc)
+            ),
+            "2026-09-23T19:00:00+05:30",
+        )
+        self.assertIsNone(main._db_timestamp_ist(None))
+
     def test_multiple_keys_and_brand_isolation(self):
         key_a = "pvk-a"
         key_b = "pvk-b"
@@ -180,6 +193,7 @@ class BrandConnectionTests(unittest.TestCase):
             offset=0,
         )
         item = result["items"][0]
+        self.assertEqual(item["created_at"], "2025-01-02T03:04:05+05:30")
         self.assertEqual(item["connection_key_prefix"], "pvk_12345678")
         self.assertEqual(item["submitted_code"], "CODE-123")
         self.assertEqual(item["result"], "first")
@@ -282,6 +296,7 @@ class BrandConnectionRouteTests(unittest.TestCase):
             ),
             {"brand_id": self.brand_id, "batch": f"ROUTE-{suffix}"},
         ).scalar_one()
+        self.batch_id = batch_id
         self.code_id = self.db.execute(
             text(
                 "INSERT INTO product_codes(code,brand_id,batch_id) "
@@ -342,6 +357,9 @@ class BrandConnectionRouteTests(unittest.TestCase):
             [(r.status_code, r.json()["status"]) for r in outcomes],
             [(200, "first"), (200, "repeat"), (200, "invalid")],
         )
+        self.assertTrue(outcomes[0].json()["verified_at"].endswith("+05:30"))
+        self.assertTrue(outcomes[1].json()["first_verified_at"].endswith("+05:30"))
+        self.assertTrue(outcomes[1].json()["current_scan_at"].endswith("+05:30"))
         malformed = self.client.post(
             f"/api/v1/brands/{self.slug}/verify",
             headers=headers,
@@ -429,10 +447,14 @@ class BrandConnectionRouteTests(unittest.TestCase):
             ).json()["total"],
             len(audit),
         )
-        now_utc = dt.datetime.utcnow()
         for row in sources:
             created = dt.datetime.fromisoformat(row["created_at"])
-            self.assertLess(abs((now_utc - created).total_seconds()), 60)
+            self.assertEqual(created.utcoffset(), dt.timedelta(hours=5, minutes=30))
+
+        batch = self.client.get(f"/api/batches/{self.batch_id}").json()
+        self.assertTrue(batch["last_verified_at"].endswith("+05:30"))
+        codes = self.client.get(f"/api/batches/{self.batch_id}/codes").json()
+        self.assertTrue(codes["items"][0]["last_verified_at"].endswith("+05:30"))
 
         activity = self.client.get(
             "/api/activity", params={"brand_id": self.brand_id}
@@ -442,6 +464,7 @@ class BrandConnectionRouteTests(unittest.TestCase):
             {row["source"] for row in activity.json()},
             {"connection", "public"},
         )
+        self.assertTrue(all(row["created_at"].endswith("+05:30") for row in activity.json()))
 
 
 if __name__ == "__main__":

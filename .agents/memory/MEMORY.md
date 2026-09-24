@@ -1,1 +1,2 @@
 - [Applied Alembic revisions](applied-alembic-revisions.md) — never edit an applied migration; append a corrective revision that handles draft-schema drift safely.
+- [VPS timestamp convention](vps-timestamp-convention.md) — VPS database timestamps are naive IST wall clocks; preserve that meaning when serializing and writing.
