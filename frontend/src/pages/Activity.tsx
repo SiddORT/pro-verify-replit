@@ -32,6 +32,8 @@ export default function Activity() {
       if (brandId) params.brand_id = brandId;
       if (valid) params.valid = valid;
       const r = await api.get("/api/activity", { params });
+      console.log("ACTIVITY API created_at:", r.data?.[0]?.created_at);
+      console.log("ACTIVITY API first row:", r.data?.[0]);
       setRows(Array.isArray(r.data) ? r.data : (r.data?.items || []));
     } finally { setLoading(false); }
   }
